@@ -2,130 +2,123 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Budget Planner - PH Style (Firebase)</title>
-  <script src="https://www.gstatic.com/firebasejs/10.11.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.11.1/firebase-database-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.11.1/firebase-auth-compat.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Budget Planner - PH Firebase</title>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
   <style>
-    body { font-family: Arial, sans-serif; margin: 0; background: #f0f2f5; }
-    .login, .dashboard {
-      max-width: 500px;
-      margin: auto;
-      background: white;
-      padding: 20px;
-      margin-top: 80px;
-      border-radius: 8px;
-    }
-    h2, h3 { text-align: center; }
-    input, button {
-      width: 100%;
-      padding: 10px;
-      margin: 5px 0;
-    }
-    button { background: #1877f2; color: white; border: none; border-radius: 4px; }
+    body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #f0f2f5; }
+    .login, .dashboard { max-width: 500px; margin: auto; padding: 20px; background: white; box-shadow: 0 0 10px rgba(0,0,0,0.1); margin-top: 60px; border-radius: 8px; box-sizing: border-box; }
+    h2, h3 { text-align: center; margin: 10px 0; }
+    input[type="text"], input[type="number"], input[type="password"] { width: 100%; padding: 10px; margin: 5px 0 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+    input.invalid { border: 2px solid red; }
+    button { padding: 10px 20px; background: #1877f2; color: white; border: none; border-radius: 4px; cursor: pointer; margin: 5px 0; }
     button:disabled { background: #ccc; }
-    .top-bar {
-      background: #333;
-      color: white;
-      padding: 10px;
-      position: sticky;
-      top: 0;
-      text-align: center;
-    }
-    .category {
-      margin-top: 20px;
-      border-top: 1px solid #ccc;
-      padding-top: 10px;
-    }
-    .item-row {
-      display: flex;
-      justify-content: space-between;
-      margin-bottom: 5px;
-    }
-    .item-row input { width: 80px; }
-    .invalid { border: 2px solid red; }
-    footer { text-align: center; padding: 20px; color: #666; }
+    .category { margin-bottom: 20px; border-top: 1px solid #ddd; padding-top: 10px; }
+    .top-bar { background: #555; color: white; padding: 10px; text-align: center; position: fixed; top: 0; left: 0; right: 0; z-index: 999; }
+    .top-bar h2 { font-size: 18px; margin: 5px 0; }
+    .dashboard { margin-top: 160px; }
+    .item-list input[type="checkbox"] { margin-right: 5px; }
+    .item-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px; }
+    .item-row input[type="number"] { width: 80px; margin-left: 10px; }
+    .item-row button { background: red; padding: 5px; font-size: 12px; }
+    footer { text-align: center; margin-top: 40px; padding: 10px; color: #777; font-size: 14px; }
   </style>
 </head>
 <body>
-  <div id="app"></div>
-  <footer>&copy; 2025 Budget Planner Philippines</footer>
+<div id="app"></div>
+<footer>&copy; 2025 Budget Planner Philippines</footer>
 
-  <script>
-    const firebaseConfig = {
-      apiKey: "AIzaSyBwNhm5g7zdAP38KV9QwuvrSQkTCqvX5jM",
-      authDomain: "budget-planner-051194.firebaseapp.com",
-      databaseURL: "https://budget-planner-051194-default-rtdb.firebaseio.com",
-      projectId: "budget-planner-051194",
-      storageBucket: "budget-planner-051194.appspot.com",
-      messagingSenderId: "4703789120",
-      appId: "1:4703789120:web:feaba0cc4cd4972c9a7fa5",
-      measurementId: "G-2QK9ZYTZRF"
-    };
+<script>
+  // Firebase config
+  const firebaseConfig = {
+    apiKey: "AIzaSyBwNhm5g7zdAP38KV9QwuvrSQkTCqvX5jM",
+    authDomain: "budget-planner-051194.firebaseapp.com",
+    projectId: "budget-planner-051194",
+    storageBucket: "budget-planner-051194.appspot.com",
+    messagingSenderId: "4703789120",
+    appId: "1:4703789120:web:feaba0cc4cd4972c9a7fa5",
+    measurementId: "G-2QK9ZYTZRF"
+  };
 
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.database();
-    const auth = firebase.auth();
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+  const auth = firebase.auth();
 
-    const appDiv = document.getElementById("app");
+  const app = document.getElementById('app');
+  let currentUser = null;
 
-    const categories = {
-      'Foods': '🍽️',
-      'Transportation': '🚌',
-      'Utilities': '💡',
-      'Others': '🛍️'
-    };
+  function renderLogin() {
+    app.innerHTML = `
+      <div class="login">
+        <h2>Login</h2>
+        <input id="email" placeholder="Email" type="text" />
+        <input id="password" placeholder="Password" type="password" />
+        <button onclick="login()">Log In</button>
+        <p style="text-align:center;">or</p>
+        <button onclick="signup()">Sign Up</button>
+      </div>
+    `;
+  }
 
-    let currentUser = null;
+  function login() {
+    const email = document.getElementById('email').value;
+    const password = document.getElementById('password').value;
+    auth.signInWithEmailAndPassword(email, password)
+      .then(user => {
+        currentUser = user.user;
+        renderDashboard();
+      }).catch(err => alert(err.message));
+  }
 
-    function showLogin() {
-      appDiv.innerHTML = `
-        <div class="login">
-          <h2>Login / Register</h2>
-          <input id="email" type="text" placeholder="Email" />
-          <input id="password" type="password" placeholder="Password" />
-          <button onclick="login()">Login</button>
-          <button onclick="register()">Register</button>
-        </div>
-      `;
-    }
+  function signup() {
+    const email = document.getElementById('email').value;
+    const password = document.getElementById('password').value;
+    auth.createUserWithEmailAndPassword(email, password)
+      .then(user => {
+        currentUser = user.user;
+        db.ref("users/" + currentUser.uid).set({
+          income: 0,
+          savings: 0,
+          categories: {}
+        });
+        renderDashboard();
+      }).catch(err => alert(err.message));
+  }
 
-    window.login = function () {
-      const email = document.getElementById("email").value;
-      const password = document.getElementById("password").value;
-      auth.signInWithEmailAndPassword(email, password).catch(err => {
-        alert("Login failed: " + err.message);
-      });
-    };
+  function logout() {
+    auth.signOut().then(() => {
+      currentUser = null;
+      renderLogin();
+    });
+  }
 
-    window.register = function () {
-      const email = document.getElementById("email").value;
-      const password = document.getElementById("password").value;
-      auth.createUserWithEmailAndPassword(email, password).catch(err => {
-        alert("Registration failed: " + err.message);
-      });
-    };
+  function renderDashboard() {
+    const userRef = db.ref("users/" + currentUser.uid);
+    userRef.once("value").then(snapshot => {
+      const data = snapshot.val() || { income: 0, savings: 0, categories: {} };
+      const categories = { 'Foods': '🍽️', 'Transportation': '🚌', 'Utilities': '💡', 'Others': '🛍️' };
 
-    function renderDashboard(data) {
       let totalExpenses = 0;
       let totalBalance = data.income;
 
       for (let cat in categories) {
-        const catData = data.categories?.[cat] || { budget: 0, items: [] };
-        const expenses = catData.items.filter(i => i.checked).reduce((sum, i) => sum + (i.cost || 0), 0);
+        const catData = data.categories[cat] || { budget: 0, items: [] };
+        const expenses = catData.items ? catData.items.filter(i => i.checked).reduce((sum, i) => sum + (i.cost || 0), 0) : 0;
         totalExpenses += expenses;
         totalBalance -= expenses;
       }
 
-      data.savings = totalBalance;
-      db.ref(`users/${currentUser.uid}`).update({ savings: totalBalance });
+      const savings = totalBalance;
+      data.savings = savings;
+      userRef.set(data);
 
       let html = `
         <div class="top-bar">
-          <h2>Welcome, ${currentUser.email}!</h2>
+          <h2>Welcome, ${currentUser.email}</h2>
           <div>Total Income: ₱${data.income}</div>
           <div>Total Expenses: ₱${totalExpenses}</div>
           <div>Total Balance: ₱${totalBalance}</div>
@@ -139,8 +132,8 @@
       `;
 
       for (let cat in categories) {
-        const catData = data.categories?.[cat] || { budget: 0, items: [] };
-        const expenses = catData.items.filter(i => i.checked).reduce((sum, i) => sum + (i.cost || 0), 0);
+        const catData = data.categories[cat] || { budget: 0, items: [] };
+        const expenses = catData.items ? catData.items.filter(i => i.checked).reduce((sum, i) => sum + (i.cost || 0), 0) : 0;
         const balance = catData.budget - expenses;
 
         html += `
@@ -149,7 +142,7 @@
             <input id="budget-${cat}" type="number" placeholder="Set Budget (₱)" value="${catData.budget}" onblur="setBudget('${cat}')" />
             <div>Expenses: ₱${expenses} | Balance: ₱${balance}</div>
             <div class="item-list">
-              ${catData.items.map((item, index) => `
+              ${(catData.items || []).map((item, index) => `
                 <div class="item-row">
                   <label><input type="checkbox" ${item.checked ? 'checked' : ''} onchange="toggleItem('${cat}', ${index})" /> ${item.name}</label>
                   <input type="number" value="${item.cost || ''}" ${item.checked ? '' : 'disabled'} onchange="updateCost('${cat}', ${index}, this.value)" />
@@ -164,138 +157,137 @@
       }
 
       html += `
-        <div class="category"><h3>💰 Savings</h3><div>₱${data.savings || 0}</div></div>
+        <div class="category">
+          <h3>💰 Savings</h3>
+          <div>₱${data.savings}</div>
+        </div>
         <button onclick="exportPDF()">Save as PDF</button>
-      </div>
-      `;
+      </div>`;
 
-      appDiv.innerHTML = html;
-    }
+      app.innerHTML = html;
+    });
+  }
 
-    function loadDashboard() {
-      db.ref(`users/${currentUser.uid}`).on('value', snapshot => {
-        if (snapshot.exists()) {
-          renderDashboard(snapshot.val());
-        } else {
-          db.ref(`users/${currentUser.uid}`).set({
-            income: 0, savings: 0, categories: {}
-          });
-        }
-      });
-    }
-
-    window.logout = function () {
-      auth.signOut();
-    };
-
-    window.setIncome = function () {
-      const income = parseFloat(document.getElementById("income").value) || 0;
-      db.ref(`users/${currentUser.uid}`).once('value').then(snapshot => {
-        const userData = snapshot.val();
-        const newIncome = income + (userData.savings || 0);
-        db.ref(`users/${currentUser.uid}`).set({
-          income: newIncome,
-          savings: userData.savings || 0,
-          categories: {}
-        });
-      });
-    };
-
-    window.setBudget = function (cat) {
-      const inputElem = document.getElementById(`budget-${cat}`);
-      const newBudget = parseFloat(inputElem.value) || 0;
-
-      db.ref(`users/${currentUser.uid}`).once('value').then(snapshot => {
+  function setIncome() {
+    const newIncome = parseFloat(document.getElementById('income').value);
+    if (!isNaN(newIncome)) {
+      const userRef = db.ref("users/" + currentUser.uid);
+      userRef.once("value").then(snapshot => {
         const data = snapshot.val();
-        let totalOther = 0;
-        for (let key in data.categories) {
-          if (key !== cat) totalOther += data.categories[key].budget || 0;
-        }
-
-        if (totalOther + newBudget > data.income) {
-          alert("Total budget exceeds income.");
-          inputElem.classList.add("invalid");
-          inputElem.focus();
-          return;
-        }
-
-        inputElem.classList.remove("invalid");
-        const catData = data.categories?.[cat] || { items: [] };
-        db.ref(`users/${currentUser.uid}/categories/${cat}`).set({ ...catData, budget: newBudget });
+        const updatedIncome = newIncome + (data.savings || 0);
+        userRef.update({ income: updatedIncome, savings: 0, categories: {} });
+        renderDashboard();
       });
-    };
+    }
+  }
 
-    window.addItem = function (cat) {
-      const itemName = document.getElementById(`item-name-${cat}`).value;
-      db.ref(`users/${currentUser.uid}/categories/${cat}`).once('value').then(snapshot => {
-        const catData = snapshot.val() || { budget: 0, items: [] };
-        catData.items.push({ name: itemName, cost: 0, checked: false });
-        db.ref(`users/${currentUser.uid}/categories/${cat}`).set(catData);
-      });
-    };
+  function setBudget(cat) {
+    const input = parseFloat(document.getElementById(`budget-${cat}`).value) || 0;
+    const userRef = db.ref("users/" + currentUser.uid);
+    userRef.once("value").then(snapshot => {
+      const data = snapshot.val();
+      if (!data.categories[cat]) data.categories[cat] = { budget: 0, items: [] };
 
-    window.updateCost = function (cat, index, value) {
-      const newCost = parseFloat(value) || 0;
-      db.ref(`users/${currentUser.uid}/categories/${cat}`).once('value').then(snapshot => {
-        const catData = snapshot.val();
-        catData.items[index].cost = newCost;
-        const total = catData.items.filter((i, idx) => idx === index || i.checked).reduce((sum, i) => sum + i.cost, 0);
-        if (total > catData.budget) return alert("Cost exceeds budget.");
-        db.ref(`users/${currentUser.uid}/categories/${cat}`).set(catData);
-      });
-    };
+      let totalOther = 0;
+      for (let key in data.categories) {
+        if (key !== cat) totalOther += data.categories[key].budget || 0;
+      }
 
-    window.toggleItem = function (cat, index) {
-      db.ref(`users/${currentUser.uid}/categories/${cat}`).once('value').then(snapshot => {
-        const catData = snapshot.val();
-        catData.items[index].checked = !catData.items[index].checked;
-        db.ref(`users/${currentUser.uid}/categories/${cat}`).set(catData);
-      });
-    };
+      if ((totalOther + input) > data.income) {
+        alert("Total budget exceeds income.");
+        document.getElementById(`budget-${cat}`).classList.add('invalid');
+        return;
+      }
 
-    window.deleteItem = function (cat, index) {
-      db.ref(`users/${currentUser.uid}/categories/${cat}`).once('value').then(snapshot => {
-        const catData = snapshot.val();
-        catData.items.splice(index, 1);
-        db.ref(`users/${currentUser.uid}/categories/${cat}`).set(catData);
-      });
-    };
+      data.categories[cat].budget = input;
+      userRef.update({ categories: data.categories });
+      renderDashboard();
+    });
+  }
 
-    window.exportPDF = function () {
-      const { jsPDF } = window.jspdf;
-      const doc = new jsPDF();
-      db.ref(`users/${currentUser.uid}`).once('value').then(snapshot => {
-        const data = snapshot.val();
-        doc.text(`Budget Report - ${currentUser.email}`, 10, 10);
-        const rows = [];
-
-        for (let cat in data.categories) {
-          data.categories[cat].items.forEach(item => {
-            rows.push([cat, item.name, `₱${item.cost}`, item.checked ? "✔" : "✘"]);
-          });
-        }
-
-        doc.autoTable({
-          head: [['Category', 'Item', 'Cost', 'Checked']],
-          body: rows,
-          startY: 20
-        });
-
-        doc.text(`Total Income: ₱${data.income}`, 10, doc.lastAutoTable.finalY + 10);
-        doc.text(`Savings: ₱${data.savings}`, 10, doc.lastAutoTable.finalY + 20);
-        doc.save(`${currentUser.email}_budget.pdf`);
-      });
-    };
-
-    auth.onAuthStateChanged(user => {
-      if (user) {
-        currentUser = user;
-        loadDashboard();
-      } else {
-        currentUser = null;
-        showLogin();
+  function addItem(cat) {
+    const name = document.getElementById(`item-name-${cat}`).value;
+    const userRef = db.ref("users/" + currentUser.uid);
+    userRef.once("value").then(snapshot => {
+      const data = snapshot.val();
+      if (!data.categories[cat]) data.categories[cat] = { budget: 0, items: [] };
+      if (name) {
+        data.categories[cat].items.push({ name, cost: 0, checked: false });
+        userRef.update({ categories: data.categories });
+        renderDashboard();
       }
     });
-  </script>
+  }
+
+  function updateCost(cat, index, value) {
+    const cost = parseFloat(value) || 0;
+    const userRef = db.ref("users/" + currentUser.uid);
+    userRef.once("value").then(snapshot => {
+      const data = snapshot.val();
+      const items = data.categories[cat].items;
+      items[index].cost = cost;
+      const totalChecked = items.filter(i => i.checked).reduce((a, b) => a + (b.cost || 0), 0);
+      if (totalChecked > data.categories[cat].budget) {
+        alert("Cost exceeds category budget.");
+        return renderDashboard();
+      }
+      userRef.update({ categories: data.categories });
+      renderDashboard();
+    });
+  }
+
+  function toggleItem(cat, index) {
+    const userRef = db.ref("users/" + currentUser.uid);
+    userRef.once("value").then(snapshot => {
+      const data = snapshot.val();
+      const items = data.categories[cat].items;
+      items[index].checked = !items[index].checked;
+      userRef.update({ categories: data.categories });
+      renderDashboard();
+    });
+  }
+
+  function deleteItem(cat, index) {
+    const userRef = db.ref("users/" + currentUser.uid);
+    userRef.once("value").then(snapshot => {
+      const data = snapshot.val();
+      data.categories[cat].items.splice(index, 1);
+      userRef.update({ categories: data.categories });
+      renderDashboard();
+    });
+  }
+
+  function exportPDF() {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    const userRef = db.ref("users/" + currentUser.uid);
+    userRef.once("value").then(snapshot => {
+      const data = snapshot.val();
+      const categories = data.categories;
+      const rows = [];
+
+      Object.keys(categories).forEach(cat => {
+        categories[cat].items.forEach(item => {
+          rows.push([cat, item.name, `₱${item.cost}`, item.checked ? '✔' : '✘']);
+        });
+      });
+
+      doc.text(`Budget Report - ${currentUser.email}`, 10, 10);
+      doc.autoTable({ head: [['Category', 'Item', 'Cost', 'Checked']], body: rows, startY: 20 });
+      doc.text(`Total Income: ₱${data.income}`, 10, doc.lastAutoTable.finalY + 10);
+      doc.text(`Savings: ₱${data.savings}`, 10, doc.lastAutoTable.finalY + 20);
+      doc.save(`${currentUser.email}_budget.pdf`);
+    });
+  }
+
+  auth.onAuthStateChanged(user => {
+    if (user) {
+      currentUser = user;
+      renderDashboard();
+    } else {
+      renderLogin();
+    }
+  });
+</script>
 </body>
 </html>
