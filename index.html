@@ -4,13 +4,57 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Budget Planner - PH Style (Firebase)</title>
+  <script src="https://www.gstatic.com/firebasejs/10.11.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.1/firebase-database-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.1/firebase-auth-compat.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-app.js";
-    import { getDatabase, ref, get, set, update, onValue } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-database.js";
-    import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-auth.js";
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; background: #f0f2f5; }
+    .login, .dashboard {
+      max-width: 500px;
+      margin: auto;
+      background: white;
+      padding: 20px;
+      margin-top: 80px;
+      border-radius: 8px;
+    }
+    h2, h3 { text-align: center; }
+    input, button {
+      width: 100%;
+      padding: 10px;
+      margin: 5px 0;
+    }
+    button { background: #1877f2; color: white; border: none; border-radius: 4px; }
+    button:disabled { background: #ccc; }
+    .top-bar {
+      background: #333;
+      color: white;
+      padding: 10px;
+      position: sticky;
+      top: 0;
+      text-align: center;
+    }
+    .category {
+      margin-top: 20px;
+      border-top: 1px solid #ccc;
+      padding-top: 10px;
+    }
+    .item-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 5px;
+    }
+    .item-row input { width: 80px; }
+    .invalid { border: 2px solid red; }
+    footer { text-align: center; padding: 20px; color: #666; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <footer>&copy; 2025 Budget Planner Philippines</footer>
 
+  <script>
     const firebaseConfig = {
       apiKey: "AIzaSyBwNhm5g7zdAP38KV9QwuvrSQkTCqvX5jM",
       authDomain: "budget-planner-051194.firebaseapp.com",
@@ -22,9 +66,9 @@
       measurementId: "G-2QK9ZYTZRF"
     };
 
-    const app = initializeApp(firebaseConfig);
-    const db = getDatabase();
-    const auth = getAuth();
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+    const auth = firebase.auth();
 
     const appDiv = document.getElementById("app");
 
@@ -49,24 +93,20 @@
       `;
     }
 
-    window.login = async function () {
+    window.login = function () {
       const email = document.getElementById("email").value;
       const password = document.getElementById("password").value;
-      try {
-        await signInWithEmailAndPassword(auth, email, password);
-      } catch (err) {
+      auth.signInWithEmailAndPassword(email, password).catch(err => {
         alert("Login failed: " + err.message);
-      }
+      });
     };
 
-    window.register = async function () {
+    window.register = function () {
       const email = document.getElementById("email").value;
       const password = document.getElementById("password").value;
-      try {
-        await createUserWithEmailAndPassword(auth, email, password);
-      } catch (err) {
+      auth.createUserWithEmailAndPassword(email, password).catch(err => {
         alert("Registration failed: " + err.message);
-      }
+      });
     };
 
     function renderDashboard(data) {
@@ -81,7 +121,7 @@
       }
 
       data.savings = totalBalance;
-      update(ref(db, `users/${currentUser.uid}`), { savings: totalBalance });
+      db.ref(`users/${currentUser.uid}`).update({ savings: totalBalance });
 
       let html = `
         <div class="top-bar">
@@ -124,10 +164,7 @@
       }
 
       html += `
-        <div class="category">
-          <h3>💰 Savings</h3>
-          <div>₱${data.savings || 0}</div>
-        </div>
+        <div class="category"><h3>💰 Savings</h3><div>₱${data.savings || 0}</div></div>
         <button onclick="exportPDF()">Save as PDF</button>
       </div>
       `;
@@ -136,125 +173,121 @@
     }
 
     function loadDashboard() {
-      onValue(ref(db, `users/${currentUser.uid}`), snapshot => {
+      db.ref(`users/${currentUser.uid}`).on('value', snapshot => {
         if (snapshot.exists()) {
           renderDashboard(snapshot.val());
         } else {
-          set(ref(db, `users/${currentUser.uid}`), {
-            income: 0,
-            savings: 0,
-            categories: {}
+          db.ref(`users/${currentUser.uid}`).set({
+            income: 0, savings: 0, categories: {}
           });
         }
       });
     }
 
     window.logout = function () {
-      signOut(auth);
+      auth.signOut();
     };
 
-    window.setIncome = async function () {
+    window.setIncome = function () {
       const income = parseFloat(document.getElementById("income").value) || 0;
-      const snapshot = await get(ref(db, `users/${currentUser.uid}`));
-      const userData = snapshot.val();
-      const newIncome = income + (userData.savings || 0);
-      await set(ref(db, `users/${currentUser.uid}`), {
-        income: newIncome,
-        savings: userData.savings || 0,
-        categories: {}
+      db.ref(`users/${currentUser.uid}`).once('value').then(snapshot => {
+        const userData = snapshot.val();
+        const newIncome = income + (userData.savings || 0);
+        db.ref(`users/${currentUser.uid}`).set({
+          income: newIncome,
+          savings: userData.savings || 0,
+          categories: {}
+        });
       });
     };
 
-    window.setBudget = async function (cat) {
+    window.setBudget = function (cat) {
       const inputElem = document.getElementById(`budget-${cat}`);
       const newBudget = parseFloat(inputElem.value) || 0;
 
-      const snapshot = await get(ref(db, `users/${currentUser.uid}`));
-      const data = snapshot.val();
-      let totalOther = 0;
+      db.ref(`users/${currentUser.uid}`).once('value').then(snapshot => {
+        const data = snapshot.val();
+        let totalOther = 0;
+        for (let key in data.categories) {
+          if (key !== cat) totalOther += data.categories[key].budget || 0;
+        }
 
-      for (let key in data.categories) {
-        if (key !== cat) totalOther += data.categories[key].budget || 0;
-      }
+        if (totalOther + newBudget > data.income) {
+          alert("Total budget exceeds income.");
+          inputElem.classList.add("invalid");
+          inputElem.focus();
+          return;
+        }
 
-      if (totalOther + newBudget > data.income) {
-        alert("Total budget exceeds income.");
-        inputElem.classList.add("invalid");
-        inputElem.focus();
-        return;
-      }
-
-      inputElem.classList.remove("invalid");
-
-      const catRef = ref(db, `users/${currentUser.uid}/categories/${cat}`);
-      const catData = data.categories?.[cat] || { items: [] };
-      await set(catRef, { ...catData, budget: newBudget });
+        inputElem.classList.remove("invalid");
+        const catData = data.categories?.[cat] || { items: [] };
+        db.ref(`users/${currentUser.uid}/categories/${cat}`).set({ ...catData, budget: newBudget });
+      });
     };
 
-    window.addItem = async function (cat) {
+    window.addItem = function (cat) {
       const itemName = document.getElementById(`item-name-${cat}`).value;
-      const snapshot = await get(ref(db, `users/${currentUser.uid}/categories/${cat}`));
-      const catData = snapshot.exists() ? snapshot.val() : { budget: 0, items: [] };
-      catData.items.push({ name: itemName, cost: 0, checked: false });
-      await set(ref(db, `users/${currentUser.uid}/categories/${cat}`), catData);
+      db.ref(`users/${currentUser.uid}/categories/${cat}`).once('value').then(snapshot => {
+        const catData = snapshot.val() || { budget: 0, items: [] };
+        catData.items.push({ name: itemName, cost: 0, checked: false });
+        db.ref(`users/${currentUser.uid}/categories/${cat}`).set(catData);
+      });
     };
 
-    window.updateCost = async function (cat, index, value) {
+    window.updateCost = function (cat, index, value) {
       const newCost = parseFloat(value) || 0;
-      const catRef = ref(db, `users/${currentUser.uid}/categories/${cat}`);
-      const snapshot = await get(catRef);
-      const catData = snapshot.val();
-      catData.items[index].cost = newCost;
-
-      const total = catData.items.filter((i, idx) => idx === index || i.checked).reduce((sum, i) => sum + i.cost, 0);
-      if (total > catData.budget) return alert("Cost exceeds budget.");
-
-      await set(catRef, catData);
+      db.ref(`users/${currentUser.uid}/categories/${cat}`).once('value').then(snapshot => {
+        const catData = snapshot.val();
+        catData.items[index].cost = newCost;
+        const total = catData.items.filter((i, idx) => idx === index || i.checked).reduce((sum, i) => sum + i.cost, 0);
+        if (total > catData.budget) return alert("Cost exceeds budget.");
+        db.ref(`users/${currentUser.uid}/categories/${cat}`).set(catData);
+      });
     };
 
-    window.toggleItem = async function (cat, index) {
-      const catRef = ref(db, `users/${currentUser.uid}/categories/${cat}`);
-      const snapshot = await get(catRef);
-      const catData = snapshot.val();
-      catData.items[index].checked = !catData.items[index].checked;
-      await set(catRef, catData);
+    window.toggleItem = function (cat, index) {
+      db.ref(`users/${currentUser.uid}/categories/${cat}`).once('value').then(snapshot => {
+        const catData = snapshot.val();
+        catData.items[index].checked = !catData.items[index].checked;
+        db.ref(`users/${currentUser.uid}/categories/${cat}`).set(catData);
+      });
     };
 
-    window.deleteItem = async function (cat, index) {
-      const catRef = ref(db, `users/${currentUser.uid}/categories/${cat}`);
-      const snapshot = await get(catRef);
-      const catData = snapshot.val();
-      catData.items.splice(index, 1);
-      await set(catRef, catData);
+    window.deleteItem = function (cat, index) {
+      db.ref(`users/${currentUser.uid}/categories/${cat}`).once('value').then(snapshot => {
+        const catData = snapshot.val();
+        catData.items.splice(index, 1);
+        db.ref(`users/${currentUser.uid}/categories/${cat}`).set(catData);
+      });
     };
 
-    window.exportPDF = async function () {
+    window.exportPDF = function () {
       const { jsPDF } = window.jspdf;
       const doc = new jsPDF();
-      const snapshot = await get(ref(db, `users/${currentUser.uid}`));
-      const data = snapshot.val();
+      db.ref(`users/${currentUser.uid}`).once('value').then(snapshot => {
+        const data = snapshot.val();
+        doc.text(`Budget Report - ${currentUser.email}`, 10, 10);
+        const rows = [];
 
-      doc.text(`Budget Report - ${currentUser.email}`, 10, 10);
-      const rows = [];
+        for (let cat in data.categories) {
+          data.categories[cat].items.forEach(item => {
+            rows.push([cat, item.name, `₱${item.cost}`, item.checked ? "✔" : "✘"]);
+          });
+        }
 
-      for (let cat in data.categories) {
-        data.categories[cat].items.forEach(item => {
-          rows.push([cat, item.name, `₱${item.cost}`, item.checked ? "✔" : "✘"]);
+        doc.autoTable({
+          head: [['Category', 'Item', 'Cost', 'Checked']],
+          body: rows,
+          startY: 20
         });
-      }
 
-      doc.autoTable({
-        head: [['Category', 'Item', 'Cost', 'Checked']],
-        body: rows,
-        startY: 20
+        doc.text(`Total Income: ₱${data.income}`, 10, doc.lastAutoTable.finalY + 10);
+        doc.text(`Savings: ₱${data.savings}`, 10, doc.lastAutoTable.finalY + 20);
+        doc.save(`${currentUser.email}_budget.pdf`);
       });
-
-      doc.text(`Total Income: ₱${data.income}`, 10, doc.lastAutoTable.finalY + 10);
-      doc.text(`Savings: ₱${data.savings}`, 10, doc.lastAutoTable.finalY + 20);
-      doc.save(`${currentUser.email}_budget.pdf`);
     };
 
-    onAuthStateChanged(auth, user => {
+    auth.onAuthStateChanged(user => {
       if (user) {
         currentUser = user;
         loadDashboard();
@@ -264,70 +297,5 @@
       }
     });
   </script>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      margin: 0;
-      background: #f0f2f5;
-    }
-    .login, .dashboard {
-      max-width: 500px;
-      margin: auto;
-      background: white;
-      padding: 20px;
-      margin-top: 80px;
-      border-radius: 8px;
-    }
-    h2, h3 {
-      text-align: center;
-    }
-    input, button {
-      width: 100%;
-      padding: 10px;
-      margin: 5px 0;
-    }
-    button {
-      background: #1877f2;
-      color: white;
-      border: none;
-      border-radius: 4px;
-    }
-    button:disabled {
-      background: #ccc;
-    }
-    .top-bar {
-      background: #333;
-      color: white;
-      padding: 10px;
-      position: sticky;
-      top: 0;
-      text-align: center;
-    }
-    .category {
-      margin-top: 20px;
-      border-top: 1px solid #ccc;
-      padding-top: 10px;
-    }
-    .item-row {
-      display: flex;
-      justify-content: space-between;
-      margin-bottom: 5px;
-    }
-    .item-row input {
-      width: 80px;
-    }
-    .invalid {
-      border: 2px solid red;
-    }
-    footer {
-      text-align: center;
-      padding: 20px;
-      color: #666;
-    }
-  </style>
-</head>
-<body>
-  <div id="app"></div>
-  <footer>&copy; 2025 Budget Planner Philippines</footer>
 </body>
 </html>
