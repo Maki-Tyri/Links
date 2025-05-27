@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Firebase VLC Link Player</title>
+  <title>Firebase VLC Folder Player</title>
   <style>
     * { box-sizing: border-box; }
     body { font-family: sans-serif; background: #f4f4f4; margin: 0; padding: 0; }
     #login, #app {
-      max-width: 900px; margin: 30px auto; padding: 20px;
+      max-width: 1000px; margin: 30px auto; padding: 20px;
       background: #fff; border-radius: 10px; box-shadow: 0 0 10px #ccc;
     }
     h2, h3 { text-align: center; margin-top: 0; }
@@ -29,11 +29,14 @@
     li.selected { background-color: #d1ecf1; font-weight: bold; }
     .danger { background: #dc3545; color: white; }
     #linkError { color: red; font-size: 0.9em; margin-top: -8px; margin-bottom: 10px; }
-    img, video { max-width: 100%; margin-top: 10px; border-radius: 8px; }
+    img, video, audio { max-width: 100%; margin-top: 10px; border-radius: 8px; }
+    .folder-icon::before {
+      content: '\1F4C1';
+      margin-right: 8px;
+    }
   </style>
 </head>
 <body>
-
 <div id="login">
   <h2>Login</h2>
   <input type="text" id="username" placeholder="Email" />
@@ -43,7 +46,7 @@
 </div>
 
 <div id="app" style="display:none;">
-  <h2>Link Playlist Manager</h2>
+  <h2>VLC Folder Player</h2>
   <div class="flex" id="adminPanel">
     <div id="folders">
       <h3>Folders</h3>
@@ -60,8 +63,8 @@
       <button id="playAllBtn">▶️ Play All</button>
     </div>
     <div id="uploadSection">
-      <h3>Upload Image/Video</h3>
-      <input type="file" id="fileInput" accept="image/*,video/*" />
+      <h3>Upload Media (Image/Video/Music)</h3>
+      <input type="file" id="fileInput" accept="image/*,video/*,audio/*" />
       <button id="uploadBtn">Upload</button>
       <div id="filePreview"></div>
     </div>
@@ -82,7 +85,7 @@
     storageBucket: "budget-planner-051194.appspot.com",
     messagingSenderId: "4703789120",
     appId: "1:4703789120:web:feaba0cc4cd4972c9a7fa5",
-    measurementId: "G-2QK9ZYTZRF"
+    databaseURL: "https://budget-planner-051194-default-rtdb.firebaseio.com"
   };
 
   const app = initializeApp(firebaseConfig);
@@ -92,41 +95,29 @@
 
   let currentFolder = null;
   let currentUser = null;
-  let currentEmail = null;
 
   document.getElementById('loginBtn').addEventListener('click', login);
   document.getElementById('addFolderBtn').addEventListener('click', addFolder);
   document.getElementById('addLinkBtn').addEventListener('click', addLink);
-  document.getElementById('playAllBtn').addEventListener('click', playAll);
   document.getElementById('logoutBtn').addEventListener('click', () => location.reload());
   document.getElementById('uploadBtn').addEventListener('click', uploadFile);
 
   function login() {
     const email = document.getElementById('username').value.trim();
     const password = document.getElementById('password').value.trim();
-
     signInWithEmailAndPassword(auth, email, password)
       .then((userCredential) => {
         currentUser = userCredential.user.uid;
-        currentEmail = email;
         document.getElementById('login').style.display = 'none';
         document.getElementById('app').style.display = 'block';
-
-        if (email === 'larael@app.com') {
-          document.getElementById('adminPanel').style.display = 'none';
-          autoplayForLarael();
-        } else {
-          loadFolders();
-        }
+        loadFolders();
       })
-      .catch(() => {
-        document.getElementById('loginError').style.display = 'block';
-      });
+      .catch(() => document.getElementById('loginError').style.display = 'block');
   }
 
   function addFolder() {
     const name = document.getElementById('folderName').value.trim();
-    if (!name) return;
+    if (!name || !currentUser) return;
     set(ref(db, `users/${currentUser}/folders/${name}`), true);
     document.getElementById('folderName').value = '';
   }
@@ -137,26 +128,31 @@
       const data = snapshot.val() || {};
       const folderList = document.getElementById('folderList');
       folderList.innerHTML = '';
-      Object.keys(data).forEach((folder, index) => {
+      Object.keys(data).forEach((folder) => {
         const li = document.createElement('li');
-        li.textContent = folder;
+        li.innerHTML = `<span class="folder-icon">${folder}</span>`;
         li.onclick = () => {
           currentFolder = folder;
           loadLinks();
           document.querySelectorAll('#folderList li').forEach(el => el.classList.remove('selected'));
           li.classList.add('selected');
         };
+        const del = document.createElement('button');
+        del.textContent = '🗑️';
+        del.className = 'danger';
+        del.onclick = (e) => {
+          e.stopPropagation();
+          remove(ref(db, `users/${currentUser}/folders/${folder}`));
+          remove(ref(db, `users/${currentUser}/links/${folder}`));
+        };
+        li.appendChild(del);
         folderList.appendChild(li);
-        if (index === 0 && !currentFolder) li.click();
       });
     });
   }
 
   function addLink() {
-    if (!currentFolder) {
-      document.getElementById('linkError').style.display = 'block';
-      return;
-    }
+    if (!currentFolder) return document.getElementById('linkError').style.display = 'block';
     const url = document.getElementById('linkUrl').value.trim();
     if (!url) return;
     push(ref(db, `users/${currentUser}/links/${currentFolder}`), url);
@@ -183,72 +179,34 @@
     });
   }
 
-  function playAll() {
-    if (!currentFolder) return;
-    const linksRef = ref(db, `users/${currentUser}/links/${currentFolder}`);
-    onValue(linksRef, (snapshot) => {
-      const data = snapshot.val();
-      if (!data) return alert('No links');
-      const urls = Object.values(data);
-      let i = 0;
-      function next() {
-        if (i >= urls.length) return alert('Done');
-        const w = window.open(urls[i], '_blank', 'width=800,height=600');
-        if (!w) return alert('Popup blocked');
-        const checker = setInterval(() => {
-          if (w.closed) {
-            clearInterval(checker);
-            i++;
-            next();
-          }
-        }, 1000);
-      }
-      next();
-    }, { onlyOnce: true });
-  }
-
-  function autoplayForLarael() {
-    const folderRef = ref(db, `users/${currentUser}/folders`);
-    onValue(folderRef, (snapshot) => {
-      const data = snapshot.val();
-      if (!data) return;
-      const first = Object.keys(data)[0];
-      if (!first) return;
-      const linksRef = ref(db, `users/${currentUser}/links/${first}`);
-      onValue(linksRef, (snap) => {
-        const links = Object.values(snap.val() || {});
-        let i = 0;
-        function next() {
-          if (i >= links.length) return;
-          const win = window.open(links[i], '_blank', 'width=800,height=600');
-          if (!win) return alert('Popup blocked');
-          const check = setInterval(() => {
-            if (win.closed) {
-              clearInterval(check);
-              i++; next();
-            }
-          }, 1000);
-        }
-        next();
-      }, { onlyOnce: true });
-    }, { onlyOnce: true });
-  }
-
   function uploadFile() {
     const file = document.getElementById('fileInput').files[0];
-    if (!file) return alert("Select a file first");
-    const filePath = `uploads/${currentUser}/${Date.now()}_${file.name}`;
+    if (!file) return alert("Please select a file first.");
+    if (!currentUser) return alert("User not logged in.");
+    if (!currentFolder) return alert("Please select a folder first.");
+
+    const filePath = `media/${currentUser}/${currentFolder}/${Date.now()}_${file.name}`;
     const storageRef = sRef(storage, filePath);
-    uploadBytes(storageRef, file).then(() => {
-      getDownloadURL(storageRef).then(url => {
-        const preview = document.getElementById('filePreview');
-        preview.innerHTML = file.type.startsWith('video')
-          ? `<video controls src="${url}"></video>`
-          : `<img src="${url}" alt="Uploaded" />`;
+    console.log("Uploading to:", filePath);
+
+    uploadBytes(storageRef, file)
+      .then(() => getDownloadURL(storageRef))
+      .then(url => {
+        return push(ref(db, `users/${currentUser}/links/${currentFolder}`), url)
+          .then(() => {
+            const preview = document.getElementById('filePreview');
+            preview.innerHTML = file.type.startsWith('video') ?
+              `<video controls src="${url}"></video>` :
+              file.type.startsWith('audio') ?
+              `<audio controls src="${url}"></audio>` :
+              `<img src="${url}" alt="Uploaded" />`;
+          });
+      })
+      .catch(err => {
+        console.error("Upload failed:", err);
+        alert("Upload failed: " + err.message);
       });
-    }).catch(err => alert("Upload failed: " + err.message));
   }
 </script>
-
 </body>
 </html>
