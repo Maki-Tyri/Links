@@ -2,292 +2,130 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Budget Planner - PH Firebase</title>
-  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Budget Planner - Firebase</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-database-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
   <style>
-    body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #f0f2f5; }
-    .login, .dashboard { max-width: 500px; margin: auto; padding: 20px; background: white; box-shadow: 0 0 10px rgba(0,0,0,0.1); margin-top: 60px; border-radius: 8px; box-sizing: border-box; }
-    h2, h3 { text-align: center; margin: 10px 0; }
-    input[type="text"], input[type="number"], input[type="password"] { width: 100%; padding: 10px; margin: 5px 0 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
-    input.invalid { border: 2px solid red; }
-    button { padding: 10px 20px; background: #1877f2; color: white; border: none; border-radius: 4px; cursor: pointer; margin: 5px 0; }
-    button:disabled { background: #ccc; }
-    .category { margin-bottom: 20px; border-top: 1px solid #ddd; padding-top: 10px; }
-    .top-bar { background: #555; color: white; padding: 10px; text-align: center; position: fixed; top: 0; left: 0; right: 0; z-index: 999; }
-    .top-bar h2 { font-size: 18px; margin: 5px 0; }
-    .dashboard { margin-top: 160px; }
-    .item-list input[type="checkbox"] { margin-right: 5px; }
-    .item-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px; }
-    .item-row input[type="number"] { width: 80px; margin-left: 10px; }
-    .item-row button { background: red; padding: 5px; font-size: 12px; }
-    footer { text-align: center; margin-top: 40px; padding: 10px; color: #777; font-size: 14px; }
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f0f2f5;
+    }
+    .login, .dashboard {
+      max-width: 500px;
+      margin: auto;
+      padding: 20px;
+      background: white;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      margin-top: 60px;
+      border-radius: 8px;
+      box-sizing: border-box;
+    }
+    h2, h3 {
+      text-align: center;
+      margin: 10px 0;
+    }
+    input[type="text"], input[type="number"], input[type="password"] {
+      width: 100%;
+      padding: 10px;
+      margin: 5px 0 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+    input.invalid {
+      border: 2px solid red;
+    }
+    button {
+      padding: 10px 20px;
+      background: #1877f2;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      margin: 5px 0;
+    }
+    button:disabled {
+      background: #ccc;
+    }
+    .category {
+      margin-bottom: 20px;
+      border-top: 1px solid #ddd;
+      padding-top: 10px;
+    }
+    .top-bar {
+      background: #555;
+      color: white;
+      padding: 10px;
+      text-align: center;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 999;
+    }
+    .top-bar h2 {
+      font-size: 18px;
+      margin: 5px 0;
+    }
+    .dashboard {
+      margin-top: 160px;
+    }
+    .item-list input[type="checkbox"] {
+      margin-right: 5px;
+    }
+    .item-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 5px;
+    }
+    .item-row input[type="number"] {
+      width: 80px;
+      margin-left: 10px;
+    }
+    .item-row button {
+      background: red;
+      padding: 5px;
+      font-size: 12px;
+    }
+    footer {
+      text-align: center;
+      margin-top: 40px;
+      padding: 10px;
+      color: #777;
+      font-size: 14px;
+    }
   </style>
 </head>
 <body>
 <div id="app"></div>
 <footer>&copy; 2025 Budget Planner Philippines</footer>
-
 <script>
   // Firebase config
   const firebaseConfig = {
-    apiKey: "AIzaSyBwNhm5g7zdAP38KV9QwuvrSQkTCqvX5jM",
-    authDomain: "budget-planner-051194.firebaseapp.com",
-    projectId: "budget-planner-051194",
-    storageBucket: "budget-planner-051194.appspot.com",
-    messagingSenderId: "4703789120",
-    appId: "1:4703789120:web:feaba0cc4cd4972c9a7fa5",
-    measurementId: "G-2QK9ZYTZRF"
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+    databaseURL: "https://YOUR_PROJECT_ID.firebaseio.com",
+    projectId: "YOUR_PROJECT_ID",
+    storageBucket: "YOUR_PROJECT_ID.appspot.com",
+    messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+    appId: "YOUR_APP_ID"
   };
 
   firebase.initializeApp(firebaseConfig);
   const db = firebase.database();
-  const auth = firebase.auth();
 
-  const app = document.getElementById('app');
-  let currentUser = null;
-
-  function renderLogin() {
-    app.innerHTML = `
-      <div class="login">
-        <h2>Login</h2>
-        <input id="email" placeholder="Email" type="text" />
-        <input id="password" placeholder="Password" type="password" />
-        <button onclick="login()">Log In</button>
-        <p style="text-align:center;">or</p>
-        <button onclick="signup()">Sign Up</button>
-      </div>
-    `;
-  }
-
-  function login() {
-    const email = document.getElementById('email').value;
-    const password = document.getElementById('password').value;
-    auth.signInWithEmailAndPassword(email, password)
-      .then(user => {
-        currentUser = user.user;
-        renderDashboard();
-      }).catch(err => alert(err.message));
-  }
-
-  function signup() {
-    const email = document.getElementById('email').value;
-    const password = document.getElementById('password').value;
-    auth.createUserWithEmailAndPassword(email, password)
-      .then(user => {
-        currentUser = user.user;
-        db.ref("users/" + currentUser.uid).set({
-          income: 0,
-          savings: 0,
-          categories: {}
-        });
-        renderDashboard();
-      }).catch(err => alert(err.message));
-  }
-
-  function logout() {
-    auth.signOut().then(() => {
-      currentUser = null;
-      renderLogin();
-    });
-  }
-
-  function renderDashboard() {
-    const userRef = db.ref("users/" + currentUser.uid);
-    userRef.once("value").then(snapshot => {
-      const data = snapshot.val() || { income: 0, savings: 0, categories: {} };
-      const categories = { 'Foods': '🍽️', 'Transportation': '🚌', 'Utilities': '💡', 'Others': '🛍️' };
-
-      let totalExpenses = 0;
-      let totalBalance = data.income;
-
-      for (let cat in categories) {
-        const catData = data.categories[cat] || { budget: 0, items: [] };
-        const expenses = catData.items ? catData.items.filter(i => i.checked).reduce((sum, i) => sum + (i.cost || 0), 0) : 0;
-        totalExpenses += expenses;
-        totalBalance -= expenses;
-      }
-
-      const savings = totalBalance;
-      data.savings = savings;
-      userRef.set(data);
-
-      let html = `
-        <div class="top-bar">
-          <h2>Welcome, ${currentUser.email}</h2>
-          <div>Total Income: ₱${data.income}</div>
-          <div>Total Expenses: ₱${totalExpenses}</div>
-          <div>Total Balance: ₱${totalBalance}</div>
-          <button onclick="logout()">Log Out</button>
-        </div>
-        <div class="dashboard">
-          <div>
-            <input id="income" type="number" placeholder="Enter New Income" />
-            <button onclick="setIncome()">Set Income</button>
-          </div>
-      `;
-
-      for (let cat in categories) {
-        const catData = data.categories[cat] || { budget: 0, items: [] };
-        const expenses = catData.items ? catData.items.filter(i => i.checked).reduce((sum, i) => sum + (i.cost || 0), 0) : 0;
-        const balance = catData.budget - expenses;
-
-        html += `
-          <div class="category">
-            <h3>${categories[cat]} ${cat}</h3>
-            <input id="budget-${cat}" type="number" placeholder="Set Budget (₱)" value="${catData.budget}" onblur="setBudget('${cat}')" />
-            <div>Expenses: ₱${expenses} | Balance: ₱${balance}</div>
-            <div class="item-list">
-              ${(catData.items || []).map((item, index) => `
-                <div class="item-row">
-                  <label><input type="checkbox" ${item.checked ? 'checked' : ''} onchange="toggleItem('${cat}', ${index})" /> ${item.name}</label>
-                  <input type="number" value="${item.cost || ''}" ${item.checked ? '' : 'disabled'} onchange="updateCost('${cat}', ${index}, this.value)" />
-                  <button onclick="deleteItem('${cat}', ${index})">🗑️</button>
-                </div>
-              `).join('')}
-              <input id="item-name-${cat}" placeholder="Item Name" />
-              <button onclick="addItem('${cat}')">Add Item</button>
-            </div>
-          </div>
-        `;
-      }
-
-      html += `
-        <div class="category">
-          <h3>💰 Savings</h3>
-          <div>₱${data.savings}</div>
-        </div>
-        <button onclick="exportPDF()">Save as PDF</button>
-      </div>`;
-
-      app.innerHTML = html;
-    });
-  }
-
-  function setIncome() {
-    const newIncome = parseFloat(document.getElementById('income').value);
-    if (!isNaN(newIncome)) {
-      const userRef = db.ref("users/" + currentUser.uid);
-      userRef.once("value").then(snapshot => {
-        const data = snapshot.val();
-        const updatedIncome = newIncome + (data.savings || 0);
-        userRef.update({ income: updatedIncome, savings: 0, categories: {} });
-        renderDashboard();
-      });
-    }
-  }
-
-  function setBudget(cat) {
-    const input = parseFloat(document.getElementById(`budget-${cat}`).value) || 0;
-    const userRef = db.ref("users/" + currentUser.uid);
-    userRef.once("value").then(snapshot => {
-      const data = snapshot.val();
-      if (!data.categories[cat]) data.categories[cat] = { budget: 0, items: [] };
-
-      let totalOther = 0;
-      for (let key in data.categories) {
-        if (key !== cat) totalOther += data.categories[key].budget || 0;
-      }
-
-      if ((totalOther + input) > data.income) {
-        alert("Total budget exceeds income.");
-        document.getElementById(`budget-${cat}`).classList.add('invalid');
-        return;
-      }
-
-      data.categories[cat].budget = input;
-      userRef.update({ categories: data.categories });
-      renderDashboard();
-    });
-  }
-
-  function addItem(cat) {
-    const name = document.getElementById(`item-name-${cat}`).value;
-    const userRef = db.ref("users/" + currentUser.uid);
-    userRef.once("value").then(snapshot => {
-      const data = snapshot.val();
-      if (!data.categories[cat]) data.categories[cat] = { budget: 0, items: [] };
-      if (name) {
-        data.categories[cat].items.push({ name, cost: 0, checked: false });
-        userRef.update({ categories: data.categories });
-        renderDashboard();
-      }
-    });
-  }
-
-  function updateCost(cat, index, value) {
-    const cost = parseFloat(value) || 0;
-    const userRef = db.ref("users/" + currentUser.uid);
-    userRef.once("value").then(snapshot => {
-      const data = snapshot.val();
-      const items = data.categories[cat].items;
-      items[index].cost = cost;
-      const totalChecked = items.filter(i => i.checked).reduce((a, b) => a + (b.cost || 0), 0);
-      if (totalChecked > data.categories[cat].budget) {
-        alert("Cost exceeds category budget.");
-        return renderDashboard();
-      }
-      userRef.update({ categories: data.categories });
-      renderDashboard();
-    });
-  }
-
-  function toggleItem(cat, index) {
-    const userRef = db.ref("users/" + currentUser.uid);
-    userRef.once("value").then(snapshot => {
-      const data = snapshot.val();
-      const items = data.categories[cat].items;
-      items[index].checked = !items[index].checked;
-      userRef.update({ categories: data.categories });
-      renderDashboard();
-    });
-  }
-
-  function deleteItem(cat, index) {
-    const userRef = db.ref("users/" + currentUser.uid);
-    userRef.once("value").then(snapshot => {
-      const data = snapshot.val();
-      data.categories[cat].items.splice(index, 1);
-      userRef.update({ categories: data.categories });
-      renderDashboard();
-    });
-  }
-
-  function exportPDF() {
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
-    const userRef = db.ref("users/" + currentUser.uid);
-    userRef.once("value").then(snapshot => {
-      const data = snapshot.val();
-      const categories = data.categories;
-      const rows = [];
-
-      Object.keys(categories).forEach(cat => {
-        categories[cat].items.forEach(item => {
-          rows.push([cat, item.name, `₱${item.cost}`, item.checked ? '✔' : '✘']);
-        });
-      });
-
-      doc.text(`Budget Report - ${currentUser.email}`, 10, 10);
-      doc.autoTable({ head: [['Category', 'Item', 'Cost', 'Checked']], body: rows, startY: 20 });
-      doc.text(`Total Income: ₱${data.income}`, 10, doc.lastAutoTable.finalY + 10);
-      doc.text(`Savings: ₱${data.savings}`, 10, doc.lastAutoTable.finalY + 20);
-      doc.save(`${currentUser.email}_budget.pdf`);
-    });
-  }
-
-  auth.onAuthStateChanged(user => {
-    if (user) {
-      currentUser = user;
-      renderDashboard();
-    } else {
-      renderLogin();
-    }
-  });
+  // FROM HERE, CONTINUE TO MIGRATE YOUR EXISTING LOGIC TO USE FIREBASE DATABASE INSTEAD OF localStorage
+  // Example:
+  // firebase.database().ref(`users/${username}/data`).set(...);
+  // firebase.database().ref(`users/${username}/data`).once('value').then(...);
 </script>
+<script src="budget-app-firebase.js"></script>
 </body>
 </html>
