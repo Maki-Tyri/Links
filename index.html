@@ -2,532 +2,266 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Budget Planner - Firebase Auth & Realtime DB</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Firebase VLC Link Player</title>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      margin: 0; padding: 0;
-      background: #f0f2f5;
-    }
-    .login, .dashboard {
-      max-width: 500px;
-      margin: auto;
-      padding: 20px;
-      background: white;
-      box-shadow: 0 0 10px rgba(0,0,0,0.1);
-      margin-top: 60px;
-      border-radius: 8px;
+    * {
       box-sizing: border-box;
+    }
+    body {
+      font-family: sans-serif;
+      background: #f4f4f4;
+      margin: 0;
+      padding: 0;
+    }
+    #login, #app {
+      max-width: 900px;
+      margin: 30px auto;
+      padding: 20px;
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 0 10px #ccc;
     }
     h2, h3 {
       text-align: center;
-      margin: 10px 0;
+      margin-top: 0;
     }
-    input[type="text"], input[type="number"], input[type="password"], input[type="email"] {
+    input, select, button {
       width: 100%;
       padding: 10px;
-      margin: 5px 0 10px;
+      margin: 10px 0;
       border: 1px solid #ccc;
-      border-radius: 4px;
+      border-radius: 5px;
       box-sizing: border-box;
     }
-    input.invalid {
-      border: 2px solid red;
-    }
     button {
-      padding: 10px 20px;
-      background: #1877f2;
-      color: white;
       border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      margin: 5px 0;
-    }
-    button:disabled {
-      background: #ccc;
-      cursor: not-allowed;
-    }
-    .category {
-      margin-bottom: 20px;
-      border-top: 1px solid #ddd;
-      padding-top: 10px;
-    }
-    .top-bar {
-      background: #555;
+      background-color: #007bff;
       color: white;
-      padding: 10px;
-      text-align: center;
-      position: fixed;
-      top: 0; left: 0; right: 0;
-      z-index: 999;
+      cursor: pointer;
     }
-    .top-bar h2 {
-      font-size: 18px;
-      margin: 5px 0;
+    button:hover {
+      background-color: #0056b3;
     }
-    .dashboard {
-      margin-top: 160px;
-    }
-    .item-list input[type="checkbox"] {
-      margin-right: 5px;
-    }
-    .item-row {
+    .flex {
       display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 5px;
+      flex-wrap: wrap;
+      gap: 20px;
     }
-    .item-row input[type="number"] {
-      width: 80px;
-      margin-left: 10px;
+    #folders, #links {
+      flex: 1;
+      min-width: 250px;
     }
-    .item-row button {
-      background: red;
-      padding: 5px;
-      font-size: 12px;
-      border: none;
-      border-radius: 3px;
-      cursor: pointer;
+    ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
     }
-    footer {
-      text-align: center;
-      margin-top: 40px;
+    li {
+      background: #eee;
+      margin: 5px 0;
       padding: 10px;
-      color: #777;
-      font-size: 14px;
+      border-radius: 5px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      word-break: break-word;
     }
-    .error {
+    li.selected {
+      background-color: #d1ecf1;
+      font-weight: bold;
+    }
+    .danger {
+      background: #dc3545;
+      color: white;
+    }
+    #linkList, #folderList {
+      max-height: 300px;
+      overflow-y: auto;
+      padding-right: 5px;
+    }
+    #linkError {
       color: red;
-      font-size: 14px;
-      text-align: center;
+      font-size: 0.9em;
+      margin-top: -8px;
       margin-bottom: 10px;
     }
   </style>
 </head>
 <body>
 
-<div id="app"></div>
-<footer>&copy; 2025 Budget Planner Philippines</footer>
+<div id="login">
+  <h2>Login</h2>
+  <input type="text" id="username" placeholder="Email" />
+  <input type="password" id="password" placeholder="Password" />
+  <button id="loginBtn">Login</button>
+  <p id="loginError" style="color:red; display:none; text-align:center;">Invalid credentials</p>
+</div>
 
-<!-- Firebase App (the core Firebase SDK) -->
+<div id="app" style="display:none;">
+  <h2>Link Playlist Manager</h2>
+  <div class="flex">
+    <div id="folders">
+      <h3>Folders</h3>
+      <input id="folderName" placeholder="New folder name" />
+      <button id="addFolderBtn">Add Folder</button>
+      <ul id="folderList"></ul>
+    </div>
+    <div id="links">
+      <h3>Links</h3>
+      <input id="linkUrl" placeholder="New link (https://...)" />
+      <button id="addLinkBtn">Add Link</button>
+      <p id="linkError" style="display:none;">Please select a folder first.</p>
+      <ul id="linkList"></ul>
+      <button id="playAllBtn">▶️ Play All</button>
+    </div>
+  </div>
+  <button id="logoutBtn" style="background:#6c757d;">Logout</button>
+</div>
+
 <script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-app.js";
-  import {
-    getAuth,
-    createUserWithEmailAndPassword,
-    signInWithEmailAndPassword,
-    signOut,
-    onAuthStateChanged
-  } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-auth.js";
-  import {
-    getDatabase,
-    ref,
-    set,
-    get,
-    onValue,
-    update
-  } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-database.js";
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
+  import { getDatabase, ref, set, push, onValue, remove } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-database.js";
+  import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-analytics.js";
+  import { getAuth, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-auth.js";
 
-  // Your Firebase configuration
   const firebaseConfig = {
     apiKey: "AIzaSyBwNhm5g7zdAP38KV9QwuvrSQkTCqvX5jM",
     authDomain: "budget-planner-051194.firebaseapp.com",
-    databaseURL: "https://budget-planner-051194-default-rtdb.firebaseio.com",
     projectId: "budget-planner-051194",
-    storageBucket: "budget-planner-051194.appspot.com",
+    storageBucket: "budget-planner-051194.firebasestorage.app",
     messagingSenderId: "4703789120",
     appId: "1:4703789120:web:feaba0cc4cd4972c9a7fa5",
     measurementId: "G-2QK9ZYTZRF"
   };
 
-  // Initialize Firebase
   const app = initializeApp(firebaseConfig);
+  const analytics = getAnalytics(app);
+  const db = getDatabase(app);
   const auth = getAuth(app);
-  const database = getDatabase(app);
 
-  const appDiv = document.getElementById('app');
+  let currentFolder = null;
+  let currentUser = null;
 
-  // Category emojis
-  const categoriesEmojis = {
-    'Foods': '🍽️',
-    'Transportation': '🚌',
-    'Utilities': '💡',
-    'Others': '🛍️'
-  };
+  document.getElementById('loginBtn').addEventListener('click', manualLogin);
+  document.getElementById('addFolderBtn').addEventListener('click', addFolder);
+  document.getElementById('addLinkBtn').addEventListener('click', addLink);
+  document.getElementById('playAllBtn').addEventListener('click', playAll);
+  document.getElementById('logoutBtn').addEventListener('click', logout);
 
-  // --- RENDER LOGIN FORM ---
-  function renderLogin() {
-    appDiv.innerHTML = `
-      <div class="login">
-        <h2>Budget Planner Login</h2>
-        <input id="email" type="email" placeholder="Email" />
-        <input id="password" type="password" placeholder="Password" />
-        <div style="display:flex; justify-content: space-between;">
-          <button id="loginBtn">Log In</button>
-          <button id="signupBtn">Sign Up</button>
-        </div>
-        <div id="loginError" class="error"></div>
-      </div>
-    `;
-
-    document.getElementById('loginBtn').onclick = login;
-    document.getElementById('signupBtn').onclick = signUp;
-  }
-
-  // --- RENDER DASHBOARD ---
-  function renderDashboard(user, data) {
-    // Compute totals
-    let totalExpenses = 0;
-    let totalBalance = data.income || 0;
-
-    for (const cat in categoriesEmojis) {
-      const catData = data.categories?.[cat] || { budget: 0, items: [] };
-      const expenses = catData.items.filter(i => i.checked).reduce((sum, i) => sum + (i.cost || 0), 0);
-      totalExpenses += expenses;
-      totalBalance -= expenses;
-    }
-    const savings = totalBalance;
-
-    // Store savings locally in data (not pushed back immediately)
-    data.savings = savings;
-
-    // Build HTML
-    let html = `
-      <div class="top-bar">
-        <h2>Welcome, ${user.email}!</h2>
-        <div>Total Income: ₱${data.income || 0}</div>
-        <div>Total Expenses: ₱${totalExpenses}</div>
-        <div>Total Balance: ₱${totalBalance}</div>
-        <button id="logoutBtn">Log Out</button>
-      </div>
-
-      <div class="dashboard">
-        <div>
-          <input id="income" type="number" placeholder="Enter New Income" value="${data.income || ''}" />
-          <button id="setIncomeBtn">Set Income</button>
-        </div>
-    `;
-
-    for (const cat in categoriesEmojis) {
-      const catData = data.categories?.[cat] || { budget: 0, items: [] };
-      const expenses = catData.items.filter(i => i.checked).reduce((sum, i) => sum + (i.cost || 0), 0);
-      const balance = catData.budget - expenses;
-
-      html += `
-        <div class="category">
-          <h3>${categoriesEmojis[cat]} ${cat}</h3>
-          <input id="budget-${cat}" type="number" placeholder="Set Budget (₱)" value="${catData.budget}" />
-          <div>Expenses: ₱${expenses} | Balance: ₱${balance}</div>
-          <div class="item-list">
-            ${catData.items.map((item, index) => `
-              <div class="item-row">
-                <label>
-                  <input type="checkbox" ${item.checked ? 'checked' : ''} data-cat="${cat}" data-index="${index}" class="item-check"/>
-                  ${item.name}
-                </label>
-                <input type="number" value="${item.cost || 0}" ${item.checked ? '' : 'disabled'} data-cat="${cat}" data-index="${index}" class="item-cost" />
-                <button data-cat="${cat}" data-index="${index}" class="delete-item">🗑️</button>
-              </div>
-            `).join('')}
-            <input id="item-name-${cat}" placeholder="Item Name" />
-            <button data-cat="${cat}" class="add-item">Add Item</button>
-          </div>
-        </div>
-      `;
-    }
-
-    html += `
-      <div class="category">
-        <h3>💰 Savings</h3>
-        <div>₱${savings}</div>
-      </div>
-      <button id="exportPdfBtn">Save as PDF</button>
-    </div>
-    `;
-
-    appDiv.innerHTML = html;
-
-    // Event listeners
-    document.getElementById('logoutBtn').onclick = () => {
-      signOut(auth);
-    };
-    document.getElementById('setIncomeBtn').onclick = () => setIncome(user, data);
-    
-    // Budgets on change (blur)
-    for (const cat in categoriesEmojis) {
-      const budgetInput = document.getElementById(`budget-${cat}`);
-      budgetInput.onblur = () => setBudget(user, data, cat, budgetInput.value);
-    }
-
-    // Add item buttons
-    document.querySelectorAll('.add-item').forEach(btn => {
-      btn.onclick = () => {
-        const cat = btn.getAttribute('data-cat');
-        const input = document.getElementById(`item-name-${cat}`);
-        addItem(user, data, cat, input.value);
-        input.value = '';
-      };
-    });
-
-    // Item checkbox changes
-    document.querySelectorAll('.item-check').forEach(chk => {
-      chk.onchange = (e) => {
-        const cat = e.target.getAttribute('data-cat');
-        const idx = parseInt(e.target.getAttribute('data-index'));
-        toggleItem(user, data, cat, idx, e.target.checked);
-      };
-    });
-
-    // Item cost changes
-    document.querySelectorAll('.item-cost').forEach(input => {
-      input.onchange = (e) => {
-        const cat = e.target.getAttribute('data-cat');
-        const idx = parseInt(e.target.getAttribute('data-index'));
-        updateCost(user, data, cat, idx, e.target.value);
-      };
-    });
-
-    // Delete item buttons
-    document.querySelectorAll('.delete-item').forEach(btn => {
-      btn.onclick = (e) => {
-        const cat = btn.getAttribute('data-cat');
-        const idx = parseInt(btn.getAttribute('data-index'));
-        deleteItem(user, data, cat, idx);
-      };
-    });
-
-    document.getElementById('exportPdfBtn').onclick = () => exportPDF(user, data);
-  }
-
-  // --- AUTH FUNCTIONS ---
-
-  function login() {
-    const email = document.getElementById('email').value.trim();
-    const password = document.getElementById('password').value;
-    const errorDiv = document.getElementById('loginError');
-
-    if (!email || !password) {
-      errorDiv.textContent = "Please enter email and password";
-      return;
-    }
+  function manualLogin() {
+    const email = document.getElementById('username').value.trim();
+    const password = document.getElementById('password').value.trim();
 
     signInWithEmailAndPassword(auth, email, password)
-      .catch(e => {
-        errorDiv.textContent = e.message;
+      .then((userCredential) => {
+        const user = userCredential.user;
+        currentUser = user.uid;
+        document.getElementById('login').style.display = 'none';
+        document.getElementById('app').style.display = 'block';
+        loadFolders();
+      })
+      .catch(() => {
+        document.getElementById('loginError').style.display = 'block';
       });
   }
 
-  function signUp() {
-    const email = document.getElementById('email').value.trim();
-    const password = document.getElementById('password').value;
-    const errorDiv = document.getElementById('loginError');
-
-    if (!email || !password) {
-      errorDiv.textContent = "Please enter email and password";
-      return;
-    }
-
-    createUserWithEmailAndPassword(auth, email, password)
-      .catch(e => {
-        errorDiv.textContent = e.message;
-      });
+  function logout() {
+    location.reload();
   }
 
-  // --- DATABASE FUNCTIONS ---
-
-  // Get user data ref
-  function userRef(uid) {
-    return ref(database, 'users/' + uid);
+  function addFolder() {
+    const name = document.getElementById('folderName').value.trim();
+    if (!name) return;
+    const folderRef = ref(db, `users/${currentUser}/folders/${name}`);
+    set(folderRef, true);
+    document.getElementById('folderName').value = '';
   }
 
-  // Set income (adds previous savings)
-  function setIncome(user, data) {
-    const incomeInput = document.getElementById('income');
-    let newIncome = parseFloat(incomeInput.value);
-    if (isNaN(newIncome) || newIncome < 0) {
-      alert("Please enter a valid income");
-      return;
-    }
-
-    // Add previous savings if any
-    if (data.savings > 0) {
-      newIncome += data.savings;
-    }
-
-    // Reset categories budgets and items, keep savings updated later
-    const updatedData = {
-      income: newIncome,
-      categories: data.categories || {},
-      savings: data.savings || 0
-    };
-
-    // Update only income here
-    update(userRef(user.uid), { income: newIncome });
-  }
-
-  // Set category budget
-  function setBudget(user, data, category, value) {
-    const val = parseFloat(value);
-    if (isNaN(val) || val < 0) {
-      alert("Invalid budget value");
-      renderDashboard(user, data); // revert UI
-      return;
-    }
-    // Update in DB
-    const catPath = `categories/${category}/budget`;
-    update(userRef(user.uid), { [catPath]: val });
-  }
-
-  // Add item
-  function addItem(user, data, category, itemName) {
-    if (!itemName || itemName.trim() === '') {
-      alert("Item name can't be empty");
-      return;
-    }
-    itemName = itemName.trim();
-
-    // Build new item
-    const newItem = { name: itemName, cost: 0, checked: false };
-    let catItems = data.categories?.[category]?.items || [];
-    catItems = [...catItems, newItem];
-
-    const updatePath = {};
-    updatePath[`categories/${category}/items`] = catItems;
-
-    update(userRef(user.uid), updatePath);
-  }
-
-  // Toggle item checked
-  function toggleItem(user, data, category, index, checked) {
-    const items = data.categories?.[category]?.items || [];
-    if (!items[index]) return;
-
-    // Check cost not exceeding budget when checking
-    if (checked) {
-      const catBudget = data.categories?.[category]?.budget || 0;
-      const currentExpenses = items.filter((i, idx) => i.checked && idx !== index).reduce((a,b) => a + (b.cost || 0), 0);
-      const itemCost = items[index].cost || 0;
-      if (itemCost + currentExpenses > catBudget) {
-        alert("Cannot check item. Cost exceeds category budget.");
-        renderDashboard(user, data);
-        return;
-      }
-    }
-
-    items[index].checked = checked;
-
-    const updatePath = {};
-    updatePath[`categories/${category}/items`] = items;
-    update(userRef(user.uid), updatePath);
-  }
-
-  // Update item cost
-  function updateCost(user, data, category, index, costValue) {
-    const cost = parseFloat(costValue);
-    if (isNaN(cost) || cost < 0) {
-      alert("Invalid cost value");
-      renderDashboard(user, data);
-      return;
-    }
-
-    const items = data.categories?.[category]?.items || [];
-    if (!items[index]) return;
-
-    // When checked, cost must not exceed category budget (including other checked items)
-    if (items[index].checked) {
-      const catBudget = data.categories?.[category]?.budget || 0;
-      const currentExpenses = items.filter((i, idx) => i.checked && idx !== index).reduce((a,b) => a + (b.cost || 0), 0);
-      if (cost + currentExpenses > catBudget) {
-        alert("Cost exceeds category budget.");
-        renderDashboard(user, data);
-        return;
-      }
-    }
-
-    items[index].cost = cost;
-
-    const updatePath = {};
-    updatePath[`categories/${category}/items`] = items;
-    update(userRef(user.uid), updatePath);
-  }
-
-  // Delete item
-  function deleteItem(user, data, category, index) {
-    let items = data.categories?.[category]?.items || [];
-    if (!items[index]) return;
-    items.splice(index, 1);
-    const updatePath = {};
-    updatePath[`categories/${category}/items`] = items;
-    update(userRef(user.uid), updatePath);
-  }
-
-  // Export PDF
-  function exportPDF(user, data) {
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
-
-    doc.setFontSize(16);
-    doc.text(`Budget Planner Report for ${user.email}`, 10, 15);
-
-    doc.setFontSize(12);
-    doc.text(`Income: ₱${data.income || 0}`, 10, 25);
-
-    let y = 35;
-
-    for (const cat in categoriesEmojis) {
-      const catData = data.categories?.[cat] || { budget: 0, items: [] };
-      doc.text(`${categoriesEmojis[cat]} ${cat}`, 10, y);
-      y += 6;
-      doc.text(`Budget: ₱${catData.budget}`, 15, y);
-      y += 6;
-
-      const tableData = catData.items.map(i => [
-        i.name,
-        i.checked ? 'Yes' : 'No',
-        '₱' + (i.cost || 0)
-      ]);
-      doc.autoTable({
-        startY: y,
-        head: [['Item', 'Checked', 'Cost']],
-        body: tableData,
-        margin: { left: 15 },
-        theme: 'grid',
-        styles: { fontSize: 10 }
-      });
-      y = doc.lastAutoTable.finalY + 10;
-    }
-
-    doc.text(`Savings: ₱${data.savings || 0}`, 10, y);
-
-    doc.save('budget_report.pdf');
-  }
-
-  // --- AUTH STATE LISTENER ---
-  onAuthStateChanged(auth, user => {
-    if (user) {
-      // Load user data from Realtime DB and listen for changes
-      const uRef = userRef(user.uid);
-      onValue(uRef, (snapshot) => {
-        const data = snapshot.val() || {
-          income: 0,
-          categories: {
-            Foods: { budget: 0, items: [] },
-            Transportation: { budget: 0, items: [] },
-            Utilities: { budget: 0, items: [] },
-            Others: { budget: 0, items: [] }
-          },
-          savings: 0
+  function loadFolders() {
+    const folderRef = ref(db, `users/${currentUser}/folders`);
+    onValue(folderRef, (snapshot) => {
+      const data = snapshot.val() || {};
+      const folderList = document.getElementById('folderList');
+      folderList.innerHTML = '';
+      const keys = Object.keys(data);
+      keys.forEach((folder, index) => {
+        const li = document.createElement('li');
+        li.textContent = folder;
+        if (folder === currentFolder) li.classList.add('selected');
+        li.onclick = () => {
+          currentFolder = folder;
+          loadLinks();
+          document.querySelectorAll('#folderList li').forEach(el => el.classList.remove('selected'));
+          li.classList.add('selected');
+          document.getElementById('linkError').style.display = 'none';
         };
-        renderDashboard(user, data);
+        folderList.appendChild(li);
+        if (index === 0 && !currentFolder) {
+          li.click();
+        }
       });
-    } else {
-      renderLogin();
-    }
-  });
+    });
+  }
 
+  function addLink() {
+    if (!currentFolder) {
+      document.getElementById('linkError').style.display = 'block';
+      return;
+    }
+    const url = document.getElementById('linkUrl').value.trim();
+    if (!url) return;
+    const linksRef = ref(db, `users/${currentUser}/links/${currentFolder}`);
+    push(linksRef, url);
+    document.getElementById('linkUrl').value = '';
+    document.getElementById('linkError').style.display = 'none';
+  }
+
+  function loadLinks() {
+    const linksRef = ref(db, `users/${currentUser}/links/${currentFolder}`);
+    onValue(linksRef, (snapshot) => {
+      const data = snapshot.val() || {};
+      const linkList = document.getElementById('linkList');
+      linkList.innerHTML = '';
+      Object.entries(data).forEach(([id, url]) => {
+        const li = document.createElement('li');
+        li.textContent = url;
+        const del = document.createElement('button');
+        del.textContent = 'Delete';
+        del.className = 'danger';
+        del.onclick = () => {
+          remove(ref(db, `users/${currentUser}/links/${currentFolder}/${id}`));
+        };
+        li.appendChild(del);
+        linkList.appendChild(li);
+      });
+    });
+  }
+
+  function playAll() {
+    if (!currentFolder) return;
+    const linksRef = ref(db, `users/${currentUser}/links/${currentFolder}`);
+    onValue(linksRef, (snapshot) => {
+      const data = snapshot.val();
+      if (!data) return alert('No links');
+      const urls = Object.values(data);
+      let i = 0;
+      function next() {
+        if (i >= urls.length) return alert('Done');
+        const w = window.open(urls[i], '_blank', 'width=800,height=600');
+        if (!w) return alert('Popup blocked');
+        const checker = setInterval(() => {
+          if (w.closed) {
+            clearInterval(checker);
+            i++;
+            next();
+          }
+        }, 1000);
+      }
+      next();
+    }, { onlyOnce: true });
+  }
 </script>
+
 </body>
 </html>
