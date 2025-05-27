@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Firebase VLC Folder Player</title>
   <style>
     * { box-sizing: border-box; }
@@ -15,198 +15,626 @@
     input, select, button {
       width: 100%; padding: 10px; margin: 10px 0;
       border: 1px solid #ccc; border-radius: 5px;
+      font-size: 1rem;
     }
-    button { border: none; background-color: #007bff; color: white; cursor: pointer; }
-    button:hover { background-color: #0056b3; }
+    button {
+      border: none; background-color: #007bff; color: white; cursor: pointer;
+      transition: background-color 0.3s ease;
+    }
+    button:disabled {
+      background-color: #aaa;
+      cursor: not-allowed;
+    }
+    button:hover:not(:disabled) { background-color: #0056b3; }
     .flex { display: flex; flex-wrap: wrap; gap: 20px; }
     #folders, #links, #uploadSection { flex: 1; min-width: 250px; }
-    ul { list-style: none; padding: 0; margin: 0; }
+    ul { list-style: none; padding: 0; margin: 0; max-height: 300px; overflow-y: auto; }
     li {
       background: #eee; margin: 5px 0; padding: 10px; border-radius: 5px;
       display: flex; justify-content: space-between; align-items: center;
       word-break: break-word;
+      cursor: pointer;
+      user-select: none;
     }
     li.selected { background-color: #d1ecf1; font-weight: bold; }
-    .danger { background: #dc3545; color: white; }
-    #linkError { color: red; font-size: 0.9em; margin-top: -8px; margin-bottom: 10px; }
+    .danger {
+      background: #dc3545;
+      color: white;
+      border-radius: 5px;
+      padding: 5px 10px;
+      font-size: 0.9rem;
+      cursor: pointer;
+      user-select: none;
+    }
+    .danger:hover {
+      background: #b52a31;
+    }
+    #linkError, #loginError {
+      color: red; font-size: 0.9em; margin-top: -8px; margin-bottom: 10px;
+      text-align: center;
+    }
     img, video, audio { max-width: 100%; margin-top: 10px; border-radius: 8px; }
     .folder-icon::before {
       content: '\1F4C1';
       margin-right: 8px;
     }
+    #filePreview > * {
+      max-height: 150px;
+    }
   </style>
 </head>
 <body>
-<div id="login">
-  <h2>Login</h2>
-  <input type="text" id="username" placeholder="Email" />
-  <input type="password" id="password" placeholder="Password" />
-  <button id="loginBtn">Login</button>
-  <p id="loginError" style="color:red; display:none; text-align:center;">Invalid credentials</p>
-</div>
-
-<div id="app" style="display:none;">
-  <h2>VLC Folder Player</h2>
-  <div class="flex" id="adminPanel">
-    <div id="folders">
-      <h3>Folders</h3>
-      <input id="folderName" placeholder="New folder name" />
-      <button id="addFolderBtn">Add Folder</button>
-      <ul id="folderList"></ul>
-    </div>
-    <div id="links">
-      <h3>Links</h3>
-      <input id="linkUrl" placeholder="New link (https://...)" />
-      <button id="addLinkBtn">Add Link</button>
-      <p id="linkError" style="display:none;">Please select a folder first.</p>
-      <ul id="linkList"></ul>
-      <button id="playAllBtn">▶️ Play All</button>
-    </div>
-    <div id="uploadSection">
-      <h3>Upload Media (Image/Video/Music)</h3>
-      <input type="file" id="fileInput" accept="image/*,video/*,audio/*" />
-      <button id="uploadBtn">Upload</button>
-      <div id="filePreview"></div>
-    </div>
+  <div id="login">
+    <h2>Login</h2>
+    <input type="email" id="username" placeholder="Email" autocomplete="username" />
+    <input type="password" id="password" placeholder="Password" autocomplete="current-password" />
+    <button id="loginBtn" aria-label="Login Button">Login</button>
+    <p id="loginError" style="display:none;">Invalid credentials</p>
   </div>
-  <button id="logoutBtn" style="background:#6c757d;">Logout</button>
-</div>
 
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
-  import { getDatabase, ref, set, push, onValue, remove } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-database.js";
-  import { getAuth, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-auth.js";
-  import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-storage.js";
+  <div id="app" style="display:none;">
+    <h2>VLC Folder Player</h2>
+    <div class="flex" id="adminPanel">
+      <section id="folders">
+        <h3>Folders</h3>
+        <input id="folderName" placeholder="New folder name" aria-label="New folder name" />
+        <button id="addFolderBtn">Add Folder</button>
+        <ul id="folderList" aria-label="Folder list"></ul>
+      </section>
 
-  const firebaseConfig = {
-    apiKey: "AIzaSyBwNhm5g7zdAP38KV9QwuvrSQkTCqvX5jM",
-    authDomain: "budget-planner-051194.firebaseapp.com",
-    projectId: "budget-planner-051194",
-    storageBucket: "budget-planner-051194.appspot.com",
-    messagingSenderId: "4703789120",
-    appId: "1:4703789120:web:feaba0cc4cd4972c9a7fa5",
-    databaseURL: "https://budget-planner-051194-default-rtdb.firebaseio.com"
-  };
+      <section id="links">
+        <h3>Links</h3>
+        <input id="linkUrl" placeholder="New link (https://...)" aria-label="New link URL" />
+        <button id="addLinkBtn" disabled>Add Link</button>
+        <p id="linkError" style="display:none;">Please select a folder first.</p>
+        <ul id="linkList" aria-label="Link list"></ul>
+        <button id="playAllBtn">▶️ Play All</button>
+      </section>
 
-  const app = initializeApp(firebaseConfig);
-  const db = getDatabase(app);
-  const auth = getAuth(app);
-  const storage = getStorage(app);
+      <section id="uploadSection">
+        <h3>Upload Media (Image/Video/Music)</h3>
+        <input type="file" id="fileInput" accept="image/*,video/*,audio/*" aria-label="Select media file" />
+        <button id="uploadBtn" disabled>Upload</button>
+        <div id="filePreview" aria-live="polite"></div>
+      </section>
+    </div>
+    <button id="logoutBtn" style="background:#6c757d;">Logout</button>
+  </div>
 
-  let currentFolder = null;
-  let currentUser = null;
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
+    import { getDatabase, ref, set, push, onValue, remove, get } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-database.js";
+    import { getAuth, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-auth.js";
+    import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-storage.js";
 
-  document.getElementById('loginBtn').addEventListener('click', login);
-  document.getElementById('addFolderBtn').addEventListener('click', addFolder);
-  document.getElementById('addLinkBtn').addEventListener('click', addLink);
-  document.getElementById('logoutBtn').addEventListener('click', () => location.reload());
-  document.getElementById('uploadBtn').addEventListener('click', uploadFile);
+    const firebaseConfig = {
+      apiKey: "AIzaSyBwNhm5g7zdAP38KV9QwuvrSQkTCqvX5jM",
+      authDomain: "budget-planner-051194.firebaseapp.com",
+      projectId: "budget-planner-051194",
+      storageBucket: "budget-planner-051194.appspot.com",
+      messagingSenderId: "4703789120",
+      appId: "1:4703789120:web:feaba0cc4cd4972c9a7fa5"
+    };
 
-  function login() {
-    const email = document.getElementById('username').value.trim();
-    const password = document.getElementById('password').value.trim();
-    signInWithEmailAndPassword(auth, email, password)
-      .then((userCredential) => {
-        currentUser = userCredential.user.uid;
-        document.getElementById('login').style.display = 'none';
-        document.getElementById('app').style.display = 'block';
-        loadFolders();
-      })
-      .catch(() => document.getElementById('loginError').style.display = 'block');
-  }
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+    const auth = getAuth(app);
+    const storage = getStorage(app);
 
-  function addFolder() {
-    const name = document.getElementById('folderName').value.trim();
-    if (!name || !currentUser) return;
-    set(ref(db, `users/${currentUser}/folders/${name}`), true);
-    document.getElementById('folderName').value = '';
-  }
+    let currentFolder = null;
+    let currentUser = null;
 
-  function loadFolders() {
-    const folderRef = ref(db, `users/${currentUser}/folders`);
-    onValue(folderRef, (snapshot) => {
-      const data = snapshot.val() || {};
-      const folderList = document.getElementById('folderList');
+    // DOM references
+    const loginDiv = document.getElementById('login');
+    const appDiv = document.getElementById('app');
+    const foldersDiv = document.getElementById('folders');
+    const linksDiv = document.getElementById('links');
+    const uploadSectionDiv = document.getElementById('uploadSection');
+    const folderList = document.getElementById('folderList');
+    const linkList = document.getElementById('linkList');
+    const linkError = document.getElementById('linkError');
+    const loginError = document.getElementById('loginError');
+    const playAllBtn = document.getElementById('playAllBtn');
+    const fileInput = document.getElementById('fileInput');
+    const filePreview = document.getElementById('filePreview');
+    const addFolderBtn = document.getElementById('addFolderBtn');
+    const addLinkBtn = document.getElementById('addLinkBtn');
+    const uploadBtn = document.getElementById('uploadBtn');
+
+    // Event listeners
+    document.getElementById('loginBtn').addEventListener('click', login);
+    addFolderBtn.addEventListener('click', addFolder);
+    addLinkBtn.addEventListener('click', addLink);
+    document.getElementById('logoutBtn').addEventListener('click', logout);
+    uploadBtn.addEventListener('click', uploadFile);
+    playAllBtn.addEventListener('click', () => {
+      if (!currentUser) return alert("Please login first.");
+      if (!currentFolder) return alert("Please select a folder first.");
+      loadLinksForPlayAll(currentFolder);
+    });
+    fileInput.addEventListener('change', handleFilePreview);
+
+    function toggleAddLinkUploadButtons() {
+      const enabled = currentFolder !== null;
+      addLinkBtn.disabled = !enabled;
+      uploadBtn.disabled = !enabled || !fileInput.files.length;
+    }
+
+    async function login() {
+      loginError.style.display = 'none';
+      const email = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value.trim();
+      if (!email || !password) {
+        loginError.textContent = "Please enter email and password.";
+        loginError.style.display = 'block';
+        return;
+      }
+
+      try {
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        currentUser = userCredential.user;
+        loginDiv.style.display = 'none';
+        appDiv.style.display = 'block';
+
+        if (email.toLowerCase() === "larael@app.com") {
+          // Restrict UI for larael user
+          foldersDiv.style.display = 'none';
+          linksDiv.style.display = 'none';
+          uploadSectionDiv.style.display = 'none';
+          playAllBtn.style.display = 'block';
+
+          // Auto-play all links for this user immediately
+          const allLinks = await fetchAllLinksForUser(currentUser.uid);
+          if (allLinks.length === 0) {
+            alert("No media available for playback.");
+          } else {
+            playLinksSequentially(allLinks);
+          }
+
+        } else {
+          // Normal user UI
+          foldersDiv.style.display = 'block';
+          linksDiv.style.display = 'block';
+          uploadSectionDiv.style.display = 'block';
+          playAllBtn.style.display = 'block';
+
+          loadFolders();
+        }
+      } catch (e) {
+        loginError.textContent = "Invalid credentials.";
+        loginError.style.display = 'block';
+        console.error("Login failed:", e);
+      }
+    }
+
+    async function logout() {
+      await signOut(auth);
+      currentUser = null;
+      currentFolder = null;
       folderList.innerHTML = '';
-      Object.keys(data).forEach((folder) => {
-        const li = document.createElement('li');
-        li.innerHTML = `<span class="folder-icon">${folder}</span>`;
-        li.onclick = () => {
-          currentFolder = folder;
-          loadLinks();
-          document.querySelectorAll('#folderList li').forEach(el => el.classList.remove('selected'));
-          li.classList.add('selected');
-        };
-        const del = document.createElement('button');
-        del.textContent = '🗑️';
-        del.className = 'danger';
-        del.onclick = (e) => {
-          e.stopPropagation();
-          remove(ref(db, `users/${currentUser}/folders/${folder}`));
-          remove(ref(db, `users/${currentUser}/links/${folder}`));
-        };
-        li.appendChild(del);
-        folderList.appendChild(li);
+      linkList.innerHTML = '';
+      fileInput.value = '';
+      filePreview.innerHTML = '';
+      toggleAddLinkUploadButtons();
+      loginDiv.style.display = 'block';
+      appDiv.style.display = 'none';
+      document.getElementById('username').value = '';
+      document.getElementById('password').value = '';
+    }
+
+    async function loadFolders() {
+      folderList.innerHTML = '<li>Loading folders...</li>';
+      const userFoldersRef = ref(db, `folders/${currentUser.uid}`);
+
+      // Load once
+      const snapshot = await get(userFoldersRef);
+      folderList.innerHTML = '';
+      if (!snapshot.exists()) {
+        folderList.innerHTML = '<li>No folders yet</li>';
+        currentFolder = null;
+        toggleAddLinkUploadButtons();
+        return;
+      }
+
+      const foldersData = snapshot.val();
+      for (const [key, folder] of Object.entries(foldersData)) {
+        addFolderToList(key, folder.name);
+      }
+
+      // Select first folder automatically (optional)
+      const firstFolderKey = Object.keys(foldersData)[0];
+      selectFolder(firstFolderKey);
+    }
+
+    function addFolderToList(key, name) {
+      const li = document.createElement('li');
+      li.textContent = name;
+      li.classList.add('folder-icon');
+      li.setAttribute('tabindex', 0);
+      li.dataset.key = key;
+
+      li.addEventListener('click', () => {
+        selectFolder(key);
       });
-    });
-  }
 
-  function addLink() {
-    if (!currentFolder) return document.getElementById('linkError').style.display = 'block';
-    const url = document.getElementById('linkUrl').value.trim();
-    if (!url) return;
-    push(ref(db, `users/${currentUser}/links/${currentFolder}`), url);
-    document.getElementById('linkUrl').value = '';
-    document.getElementById('linkError').style.display = 'none';
-  }
-
-  function loadLinks() {
-    const linksRef = ref(db, `users/${currentUser}/links/${currentFolder}`);
-    onValue(linksRef, (snapshot) => {
-      const data = snapshot.val() || {};
-      const list = document.getElementById('linkList');
-      list.innerHTML = '';
-      Object.entries(data).forEach(([id, url]) => {
-        const li = document.createElement('li');
-        li.textContent = url;
-        const del = document.createElement('button');
-        del.textContent = 'Delete';
-        del.className = 'danger';
-        del.onclick = () => remove(ref(db, `users/${currentUser}/links/${currentFolder}/${id}`));
-        li.appendChild(del);
-        list.appendChild(li);
+      li.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          selectFolder(key);
+        }
       });
-    });
-  }
 
-  function uploadFile() {
-    const file = document.getElementById('fileInput').files[0];
-    if (!file) return alert("Please select a file first.");
-    if (!currentUser) return alert("User not logged in.");
-    if (!currentFolder) return alert("Please select a folder first.");
+      // Add delete button
+      const delBtn = document.createElement('span');
+      delBtn.textContent = '×';
+      delBtn.className = 'danger';
+      delBtn.title = "Delete folder and all its links";
+      delBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (!confirm(`Delete folder "${name}" and ALL its links? This cannot be undone.`)) return;
+        try {
+          await remove(ref(db, `folders/${currentUser.uid}/${key}`));
+          await remove(ref(db, `links/${currentUser.uid}/${key}`));
+          if (currentFolder === key) {
+            currentFolder = null;
+            linkList.innerHTML = '';
+          }
+          loadFolders();
+        } catch (err) {
+          alert("Failed to delete folder: " + err.message);
+        }
+      });
 
-    const filePath = `media/${currentUser}/${currentFolder}/${Date.now()}_${file.name}`;
-    const storageRef = sRef(storage, filePath);
-    console.log("Uploading to:", filePath);
+      li.appendChild(delBtn);
+      folderList.appendChild(li);
+    }
 
-    uploadBytes(storageRef, file)
-      .then(() => getDownloadURL(storageRef))
-      .then(url => {
-        return push(ref(db, `users/${currentUser}/links/${currentFolder}`), url)
-          .then(() => {
-            const preview = document.getElementById('filePreview');
-            preview.innerHTML = file.type.startsWith('video') ?
-              `<video controls src="${url}"></video>` :
-              file.type.startsWith('audio') ?
-              `<audio controls src="${url}"></audio>` :
-              `<img src="${url}" alt="Uploaded" />`;
-          });
-      })
-      .catch(err => {
-        console.error("Upload failed:", err);
+    function selectFolder(key) {
+      currentFolder = key;
+      [...folderList.children].forEach(li => li.classList.toggle('selected', li.dataset.key === key));
+      loadLinks(key);
+      toggleAddLinkUploadButtons();
+    }
+
+    async function loadLinks(folderKey) {
+      linkList.innerHTML = '<li>Loading links...</li>';
+      const linksRef = ref(db, `links/${currentUser.uid}/${folderKey}`);
+      const snapshot = await get(linksRef);
+
+      linkList.innerHTML = '';
+      if (!snapshot.exists()) {
+        linkList.innerHTML = '<li>No links in this folder.</li>';
+        return;
+      }
+
+      const linksData = snapshot.val();
+
+      for (const [key, link] of Object.entries(linksData)) {
+        addLinkToList(folderKey, key, link.url);
+      }
+    }
+
+    function addLinkToList(folderKey, key, url) {
+      const li = document.createElement('li');
+      li.textContent = url;
+      li.setAttribute('title', url);
+      li.setAttribute('tabindex', 0);
+
+      li.addEventListener('click', () => {
+        window.open(url, '_blank');
+      });
+      li.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          window.open(url, '_blank');
+        }
+      });
+
+      // Delete button
+      const delBtn = document.createElement('span');
+      delBtn.textContent = '×';
+      delBtn.className = 'danger';
+      delBtn.title = "Delete this link";
+      delBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (!confirm("Delete this link?")) return;
+        try {
+          await remove(ref(db, `links/${currentUser.uid}/${folderKey}/${key}`));
+          loadLinks(folderKey);
+        } catch (err) {
+          alert("Failed to delete link: " + err.message);
+        }
+      });
+
+      li.appendChild(delBtn);
+      linkList.appendChild(li);
+    }
+
+    async function addFolder() {
+      const folderNameInput = document.getElementById('folderName');
+      const name = folderNameInput.value.trim();
+      if (!name) {
+        alert("Please enter a folder name.");
+        return;
+      }
+
+      const userFoldersRef = ref(db, `folders/${currentUser.uid}`);
+      try {
+        // Check for duplicate folder names
+        const snapshot = await get(userFoldersRef);
+        if (snapshot.exists()) {
+          const foldersData = snapshot.val();
+          for (const folder of Object.values(foldersData)) {
+            if (folder.name.toLowerCase() === name.toLowerCase()) {
+              alert("Folder name already exists.");
+              return;
+            }
+          }
+        }
+
+        await push(userFoldersRef, { name });
+        folderNameInput.value = '';
+        loadFolders();
+      } catch (err) {
+        alert("Failed to add folder: " + err.message);
+      }
+    }
+
+    async function addLink() {
+      if (!currentFolder) {
+        linkError.style.display = 'block';
+        return;
+      } else {
+        linkError.style.display = 'none';
+      }
+
+      const linkInput = document.getElementById('linkUrl');
+      const url = linkInput.value.trim();
+      if (!url) {
+        alert("Please enter a valid URL.");
+        return;
+      }
+      if (!url.match(/^https?:\/\/.+/i)) {
+        alert("Please enter a valid URL starting with http:// or https://");
+        return;
+      }
+
+      const userLinksRef = ref(db, `links/${currentUser.uid}/${currentFolder}`);
+      try {
+        // Optional: prevent duplicates
+        const snapshot = await get(userLinksRef);
+        if (snapshot.exists()) {
+          const linksData = snapshot.val();
+          if (Object.values(linksData).some(link => link.url === url)) {
+            alert("Link already exists in this folder.");
+            return;
+          }
+        }
+
+        await push(userLinksRef, { url });
+        linkInput.value = '';
+        loadLinks(currentFolder);
+      } catch (err) {
+        alert("Failed to add link: " + err.message);
+      }
+    }
+
+    function handleFilePreview() {
+      filePreview.innerHTML = '';
+      if (!fileInput.files.length) {
+        toggleAddLinkUploadButtons();
+        return;
+      }
+
+      const file = fileInput.files[0];
+      const fileType = file.type;
+
+      if (fileType.startsWith('image/')) {
+        const img = document.createElement('img');
+        img.src = URL.createObjectURL(file);
+        img.onload = () => URL.revokeObjectURL(img.src);
+        filePreview.appendChild(img);
+      } else if (fileType.startsWith('video/')) {
+        const video = document.createElement('video');
+        video.controls = true;
+        video.src = URL.createObjectURL(file);
+        video.onload = () => URL.revokeObjectURL(video.src);
+        filePreview.appendChild(video);
+      } else if (fileType.startsWith('audio/')) {
+        const audio = document.createElement('audio');
+        audio.controls = true;
+        audio.src = URL.createObjectURL(file);
+        audio.onload = () => URL.revokeObjectURL(audio.src);
+        filePreview.appendChild(audio);
+      } else {
+        filePreview.textContent = "Unsupported file type.";
+      }
+      toggleAddLinkUploadButtons();
+    }
+
+    async function uploadFile() {
+      if (!currentFolder) {
+        alert("Please select a folder first.");
+        return;
+      }
+      if (!fileInput.files.length) {
+        alert("Please select a file to upload.");
+        return;
+      }
+      const file = fileInput.files[0];
+      const storageRef = sRef(storage, `${currentUser.uid}/${currentFolder}/${file.name}`);
+
+      uploadBtn.disabled = true;
+      uploadBtn.textContent = "Uploading...";
+      try {
+        await uploadBytes(storageRef, file);
+        const url = await getDownloadURL(storageRef);
+        // Add the download URL as a link
+        const userLinksRef = ref(db, `links/${currentUser.uid}/${currentFolder}`);
+        await push(userLinksRef, { url });
+        alert("Upload successful!");
+        fileInput.value = '';
+        filePreview.innerHTML = '';
+        loadLinks(currentFolder);
+      } catch (err) {
         alert("Upload failed: " + err.message);
+      } finally {
+        uploadBtn.disabled = false;
+        uploadBtn.textContent = "Upload";
+        toggleAddLinkUploadButtons();
+      }
+    }
+
+    async function fetchAllLinksForUser(uid) {
+      const linksRef = ref(db, `links/${uid}`);
+      const snapshot = await get(linksRef);
+      if (!snapshot.exists()) return [];
+      const allLinksObj = snapshot.val();
+
+      let allLinks = [];
+      for (const folderKey in allLinksObj) {
+        const links = Object.values(allLinksObj[folderKey]).map(l => l.url);
+        allLinks = allLinks.concat(links);
+      }
+      return allLinks;
+    }
+
+    async function loadLinksForPlayAll(folderKey) {
+      const linksRef = ref(db, `links/${currentUser.uid}/${folderKey}`);
+      const snapshot = await get(linksRef);
+      if (!snapshot.exists()) {
+        alert("No links in this folder.");
+        return;
+      }
+      const linksData = snapshot.val();
+      const urls = Object.values(linksData).map(l => l.url);
+      if (urls.length === 0) {
+        alert("No links in this folder.");
+        return;
+      }
+      playLinksSequentially(urls);
+    }
+
+    // Play links one by one inside a fullscreen div
+    function playLinksSequentially(urls) {
+      if (urls.length === 0) {
+        alert("No media to play.");
+        return;
+      }
+
+      let currentIndex = 0;
+      const playerDiv = document.createElement('div');
+      playerDiv.style.position = 'fixed';
+      playerDiv.style.top = '0';
+      playerDiv.style.left = '0';
+      playerDiv.style.width = '100vw';
+      playerDiv.style.height = '100vh';
+      playerDiv.style.backgroundColor = 'black';
+      playerDiv.style.zIndex = '9999';
+      playerDiv.style.display = 'flex';
+      playerDiv.style.justifyContent = 'center';
+      playerDiv.style.alignItems = 'center';
+      playerDiv.style.flexDirection = 'column';
+      playerDiv.style.color = 'white';
+
+      const closeBtn = document.createElement('button');
+      closeBtn.textContent = "✖ Close Player";
+      closeBtn.style.position = 'absolute';
+      closeBtn.style.top = '20px';
+      closeBtn.style.right = '20px';
+      closeBtn.style.backgroundColor = 'rgba(255,0,0,0.7)';
+      closeBtn.style.border = 'none';
+      closeBtn.style.color = 'white';
+      closeBtn.style.fontSize = '1.2rem';
+      closeBtn.style.padding = '10px 15px';
+      closeBtn.style.cursor = 'pointer';
+      closeBtn.style.borderRadius = '5px';
+
+      closeBtn.addEventListener('click', () => {
+        document.body.removeChild(playerDiv);
       });
-  }
-</script>
+
+      playerDiv.appendChild(closeBtn);
+
+      const mediaContainer = document.createElement('div');
+      mediaContainer.style.maxWidth = '90vw';
+      mediaContainer.style.maxHeight = '80vh';
+      mediaContainer.style.display = 'flex';
+      mediaContainer.style.justifyContent = 'center';
+      mediaContainer.style.alignItems = 'center';
+
+      playerDiv.appendChild(mediaContainer);
+      document.body.appendChild(playerDiv);
+
+      async function playNext() {
+        if (currentIndex >= urls.length) {
+          document.body.removeChild(playerDiv);
+          return;
+        }
+
+        const url = urls[currentIndex];
+        mediaContainer.innerHTML = '';
+
+        try {
+          // Detect media type by file extension or mime (basic)
+          const lowerUrl = url.toLowerCase();
+          let mediaElement;
+          if (/\.(jpg|jpeg|png|gif|bmp|webp)$/.test(lowerUrl)) {
+            mediaElement = document.createElement('img');
+            mediaElement.src = url;
+          } else if (/\.(mp4|webm|ogg)$/.test(lowerUrl)) {
+            mediaElement = document.createElement('video');
+            mediaElement.src = url;
+            mediaElement.controls = true;
+            mediaElement.autoplay = true;
+          } else if (/\.(mp3|wav|ogg|m4a)$/.test(lowerUrl)) {
+            mediaElement = document.createElement('audio');
+            mediaElement.src = url;
+            mediaElement.controls = true;
+            mediaElement.autoplay = true;
+          } else {
+            // fallback: open in new tab
+            window.open(url, '_blank');
+            currentIndex++;
+            playNext();
+            return;
+          }
+
+          mediaElement.style.maxWidth = '100%';
+          mediaElement.style.maxHeight = '100%';
+
+          mediaContainer.appendChild(mediaElement);
+
+          if (mediaElement.tagName === 'VIDEO' || mediaElement.tagName === 'AUDIO') {
+            mediaElement.onended = () => {
+              currentIndex++;
+              playNext();
+            };
+            mediaElement.onerror = () => {
+              alert(`Failed to play media: ${url}`);
+              currentIndex++;
+              playNext();
+            };
+          } else if (mediaElement.tagName === 'IMG') {
+            // Show image for 5 seconds then next
+            setTimeout(() => {
+              currentIndex++;
+              playNext();
+            }, 5000);
+          } else {
+            currentIndex++;
+            playNext();
+          }
+        } catch (err) {
+          alert("Error playing media: " + err.message);
+          currentIndex++;
+          playNext();
+        }
+      }
+
+      playNext();
+    }
+
+  </script>
 </body>
 </html>
