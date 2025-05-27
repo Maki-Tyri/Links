@@ -2,90 +2,34 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Firebase VLC Link Player</title>
   <style>
-    * {
-      box-sizing: border-box;
-    }
-    body {
-      font-family: sans-serif;
-      background: #f4f4f4;
-      margin: 0;
-      padding: 0;
-    }
+    * { box-sizing: border-box; }
+    body { font-family: sans-serif; background: #f4f4f4; margin: 0; padding: 0; }
     #login, #app {
-      max-width: 900px;
-      margin: 30px auto;
-      padding: 20px;
-      background: #fff;
-      border-radius: 10px;
-      box-shadow: 0 0 10px #ccc;
+      max-width: 900px; margin: 30px auto; padding: 20px;
+      background: #fff; border-radius: 10px; box-shadow: 0 0 10px #ccc;
     }
-    h2, h3 {
-      text-align: center;
-      margin-top: 0;
-    }
+    h2, h3 { text-align: center; margin-top: 0; }
     input, select, button {
-      width: 100%;
-      padding: 10px;
-      margin: 10px 0;
-      border: 1px solid #ccc;
-      border-radius: 5px;
-      box-sizing: border-box;
+      width: 100%; padding: 10px; margin: 10px 0;
+      border: 1px solid #ccc; border-radius: 5px;
     }
-    button {
-      border: none;
-      background-color: #007bff;
-      color: white;
-      cursor: pointer;
-    }
-    button:hover {
-      background-color: #0056b3;
-    }
-    .flex {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 20px;
-    }
-    #folders, #links {
-      flex: 1;
-      min-width: 250px;
-    }
-    ul {
-      list-style: none;
-      padding: 0;
-      margin: 0;
-    }
+    button { border: none; background-color: #007bff; color: white; cursor: pointer; }
+    button:hover { background-color: #0056b3; }
+    .flex { display: flex; flex-wrap: wrap; gap: 20px; }
+    #folders, #links, #uploadSection { flex: 1; min-width: 250px; }
+    ul { list-style: none; padding: 0; margin: 0; }
     li {
-      background: #eee;
-      margin: 5px 0;
-      padding: 10px;
-      border-radius: 5px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
+      background: #eee; margin: 5px 0; padding: 10px; border-radius: 5px;
+      display: flex; justify-content: space-between; align-items: center;
       word-break: break-word;
     }
-    li.selected {
-      background-color: #d1ecf1;
-      font-weight: bold;
-    }
-    .danger {
-      background: #dc3545;
-      color: white;
-    }
-    #linkList, #folderList {
-      max-height: 300px;
-      overflow-y: auto;
-      padding-right: 5px;
-    }
-    #linkError {
-      color: red;
-      font-size: 0.9em;
-      margin-top: -8px;
-      margin-bottom: 10px;
-    }
+    li.selected { background-color: #d1ecf1; font-weight: bold; }
+    .danger { background: #dc3545; color: white; }
+    #linkError { color: red; font-size: 0.9em; margin-top: -8px; margin-bottom: 10px; }
+    img, video { max-width: 100%; margin-top: 10px; border-radius: 8px; }
   </style>
 </head>
 <body>
@@ -100,7 +44,7 @@
 
 <div id="app" style="display:none;">
   <h2>Link Playlist Manager</h2>
-  <div class="flex">
+  <div class="flex" id="adminPanel">
     <div id="folders">
       <h3>Folders</h3>
       <input id="folderName" placeholder="New folder name" />
@@ -115,6 +59,12 @@
       <ul id="linkList"></ul>
       <button id="playAllBtn">▶️ Play All</button>
     </div>
+    <div id="uploadSection">
+      <h3>Upload Image/Video</h3>
+      <input type="file" id="fileInput" accept="image/*,video/*" />
+      <button id="uploadBtn">Upload</button>
+      <div id="filePreview"></div>
+    </div>
   </div>
   <button id="logoutBtn" style="background:#6c757d;">Logout</button>
 </div>
@@ -122,59 +72,62 @@
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
   import { getDatabase, ref, set, push, onValue, remove } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-database.js";
-  import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-analytics.js";
   import { getAuth, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-auth.js";
+  import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-storage.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyBwNhm5g7zdAP38KV9QwuvrSQkTCqvX5jM",
     authDomain: "budget-planner-051194.firebaseapp.com",
     projectId: "budget-planner-051194",
-    storageBucket: "budget-planner-051194.firebasestorage.app",
+    storageBucket: "budget-planner-051194.appspot.com",
     messagingSenderId: "4703789120",
     appId: "1:4703789120:web:feaba0cc4cd4972c9a7fa5",
     measurementId: "G-2QK9ZYTZRF"
   };
 
   const app = initializeApp(firebaseConfig);
-  const analytics = getAnalytics(app);
   const db = getDatabase(app);
   const auth = getAuth(app);
+  const storage = getStorage(app);
 
   let currentFolder = null;
   let currentUser = null;
+  let currentEmail = null;
 
-  document.getElementById('loginBtn').addEventListener('click', manualLogin);
+  document.getElementById('loginBtn').addEventListener('click', login);
   document.getElementById('addFolderBtn').addEventListener('click', addFolder);
   document.getElementById('addLinkBtn').addEventListener('click', addLink);
   document.getElementById('playAllBtn').addEventListener('click', playAll);
-  document.getElementById('logoutBtn').addEventListener('click', logout);
+  document.getElementById('logoutBtn').addEventListener('click', () => location.reload());
+  document.getElementById('uploadBtn').addEventListener('click', uploadFile);
 
-  function manualLogin() {
+  function login() {
     const email = document.getElementById('username').value.trim();
     const password = document.getElementById('password').value.trim();
 
     signInWithEmailAndPassword(auth, email, password)
       .then((userCredential) => {
-        const user = userCredential.user;
-        currentUser = user.uid;
+        currentUser = userCredential.user.uid;
+        currentEmail = email;
         document.getElementById('login').style.display = 'none';
         document.getElementById('app').style.display = 'block';
-        loadFolders();
+
+        if (email === 'larael@app.com') {
+          document.getElementById('adminPanel').style.display = 'none';
+          autoplayForLarael();
+        } else {
+          loadFolders();
+        }
       })
       .catch(() => {
         document.getElementById('loginError').style.display = 'block';
       });
   }
 
-  function logout() {
-    location.reload();
-  }
-
   function addFolder() {
     const name = document.getElementById('folderName').value.trim();
     if (!name) return;
-    const folderRef = ref(db, `users/${currentUser}/folders/${name}`);
-    set(folderRef, true);
+    set(ref(db, `users/${currentUser}/folders/${name}`), true);
     document.getElementById('folderName').value = '';
   }
 
@@ -184,22 +137,17 @@
       const data = snapshot.val() || {};
       const folderList = document.getElementById('folderList');
       folderList.innerHTML = '';
-      const keys = Object.keys(data);
-      keys.forEach((folder, index) => {
+      Object.keys(data).forEach((folder, index) => {
         const li = document.createElement('li');
         li.textContent = folder;
-        if (folder === currentFolder) li.classList.add('selected');
         li.onclick = () => {
           currentFolder = folder;
           loadLinks();
           document.querySelectorAll('#folderList li').forEach(el => el.classList.remove('selected'));
           li.classList.add('selected');
-          document.getElementById('linkError').style.display = 'none';
         };
         folderList.appendChild(li);
-        if (index === 0 && !currentFolder) {
-          li.click();
-        }
+        if (index === 0 && !currentFolder) li.click();
       });
     });
   }
@@ -211,8 +159,7 @@
     }
     const url = document.getElementById('linkUrl').value.trim();
     if (!url) return;
-    const linksRef = ref(db, `users/${currentUser}/links/${currentFolder}`);
-    push(linksRef, url);
+    push(ref(db, `users/${currentUser}/links/${currentFolder}`), url);
     document.getElementById('linkUrl').value = '';
     document.getElementById('linkError').style.display = 'none';
   }
@@ -221,19 +168,17 @@
     const linksRef = ref(db, `users/${currentUser}/links/${currentFolder}`);
     onValue(linksRef, (snapshot) => {
       const data = snapshot.val() || {};
-      const linkList = document.getElementById('linkList');
-      linkList.innerHTML = '';
+      const list = document.getElementById('linkList');
+      list.innerHTML = '';
       Object.entries(data).forEach(([id, url]) => {
         const li = document.createElement('li');
         li.textContent = url;
         const del = document.createElement('button');
         del.textContent = 'Delete';
         del.className = 'danger';
-        del.onclick = () => {
-          remove(ref(db, `users/${currentUser}/links/${currentFolder}/${id}`));
-        };
+        del.onclick = () => remove(ref(db, `users/${currentUser}/links/${currentFolder}/${id}`));
         li.appendChild(del);
-        linkList.appendChild(li);
+        list.appendChild(li);
       });
     });
   }
@@ -260,6 +205,48 @@
       }
       next();
     }, { onlyOnce: true });
+  }
+
+  function autoplayForLarael() {
+    const folderRef = ref(db, `users/${currentUser}/folders`);
+    onValue(folderRef, (snapshot) => {
+      const data = snapshot.val();
+      if (!data) return;
+      const first = Object.keys(data)[0];
+      if (!first) return;
+      const linksRef = ref(db, `users/${currentUser}/links/${first}`);
+      onValue(linksRef, (snap) => {
+        const links = Object.values(snap.val() || {});
+        let i = 0;
+        function next() {
+          if (i >= links.length) return;
+          const win = window.open(links[i], '_blank', 'width=800,height=600');
+          if (!win) return alert('Popup blocked');
+          const check = setInterval(() => {
+            if (win.closed) {
+              clearInterval(check);
+              i++; next();
+            }
+          }, 1000);
+        }
+        next();
+      }, { onlyOnce: true });
+    }, { onlyOnce: true });
+  }
+
+  function uploadFile() {
+    const file = document.getElementById('fileInput').files[0];
+    if (!file) return alert("Select a file first");
+    const filePath = `uploads/${currentUser}/${Date.now()}_${file.name}`;
+    const storageRef = sRef(storage, filePath);
+    uploadBytes(storageRef, file).then(() => {
+      getDownloadURL(storageRef).then(url => {
+        const preview = document.getElementById('filePreview');
+        preview.innerHTML = file.type.startsWith('video')
+          ? `<video controls src="${url}"></video>`
+          : `<img src="${url}" alt="Uploaded" />`;
+      });
+    }).catch(err => alert("Upload failed: " + err.message));
   }
 </script>
 
