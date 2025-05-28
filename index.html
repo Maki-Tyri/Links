@@ -1,555 +1,111 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Firebase VLC Folder Player</title>
+  <meta charset="UTF-8">
+  <title>Auto Play Login</title>
   <style>
-    * { box-sizing: border-box; }
-    body { font-family: sans-serif; background: #f4f4f4; margin: 0; padding: 0; }
-    #login, #app {
-      max-width: 1000px; margin: 30px auto; padding: 20px;
-      background: #fff; border-radius: 10px; box-shadow: 0 0 10px #ccc;
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #e0e0e0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding-top: 100px;
     }
-    h2, h3 { text-align: center; margin-top: 0; }
-    input, select, button {
-      width: 100%; padding: 10px; margin: 10px 0;
-      border: 1px solid #ccc; border-radius: 5px;
-      font-size: 1rem;
-    }
-    button {
-      border: none; background-color: #007bff; color: white; cursor: pointer;
-      transition: background-color 0.3s ease;
-    }
-    button:disabled {
-      background-color: #aaa;
-      cursor: not-allowed;
-    }
-    button:hover:not(:disabled) { background-color: #0056b3; }
-    .flex { display: flex; flex-wrap: wrap; gap: 20px; }
-    #folders, #links, #uploadSection { flex: 1; min-width: 250px; }
-    ul { list-style: none; padding: 0; margin: 0; max-height: 300px; overflow-y: auto; }
-    li {
-      background: #eee; margin: 5px 0; padding: 10px; border-radius: 5px;
-      display: flex; justify-content: space-between; align-items: center;
-      word-break: break-word;
-      cursor: pointer;
-      user-select: none;
-    }
-    li.selected { background-color: #d1ecf1; font-weight: bold; }
-    .danger {
-      background: #dc3545;
-      color: white;
-      border-radius: 5px;
-      padding: 5px 10px;
-      font-size: 0.9rem;
-      cursor: pointer;
-      user-select: none;
-    }
-    .danger:hover {
-      background: #b52a31;
-    }
-    #linkError, #loginError {
-      color: red; font-size: 0.9em; margin-top: -8px; margin-bottom: 10px;
+    .login-box, .player-box {
+      background: white;
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px #aaa;
       text-align: center;
     }
-    img, video, audio { max-width: 100%; margin-top: 10px; border-radius: 8px; }
-    .folder-icon::before {
-      content: '\1F4C1';
-      margin-right: 8px;
+    input {
+      padding: 10px;
+      margin: 5px;
+      width: 200px;
     }
-    #filePreview > * {
-      max-height: 150px;
+    button {
+      padding: 10px 20px;
+      margin-top: 10px;
+    }
+    video, iframe {
+      width: 100%;
+      max-width: 800px;
+      height: 450px;
+      margin-top: 20px;
     }
   </style>
 </head>
 <body>
-  <div id="login">
+
+  <div class="login-box" id="loginBox">
     <h2>Login</h2>
-    <input type="email" id="username" placeholder="Email" autocomplete="username" />
-    <input type="password" id="password" placeholder="Password" autocomplete="current-password" />
-    <button id="loginBtn" aria-label="Login Button">Login</button>
-    <p id="loginError" style="display:none;">Invalid credentials</p>
+    <input type="text" id="username" placeholder="Username"><br>
+    <input type="password" id="password" placeholder="Password"><br>
+    <button onclick="login()">Login</button>
+    <p id="message" style="color: red;"></p>
   </div>
 
-  <div id="app" style="display:none;">
-    <h2>VLC Folder Player</h2>
-    <div class="flex" id="adminPanel">
-      <section id="folders">
-        <h3>Folders</h3>
-        <input id="folderName" placeholder="New folder name" aria-label="New folder name" />
-        <button id="addFolderBtn">Add Folder</button>
-        <ul id="folderList" aria-label="Folder list"></ul>
-      </section>
-
-      <section id="links">
-        <h3>Links</h3>
-        <input id="linkUrl" placeholder="New link (https://...)" aria-label="New link URL" />
-        <button id="addLinkBtn" disabled>Add Link</button>
-        <p id="linkError" style="display:none;">Please select a folder first.</p>
-        <ul id="linkList" aria-label="Link list"></ul>
-        <button id="playAllBtn">▶️ Play All</button>
-      </section>
-
-      <section id="uploadSection">
-        <h3>Upload Media (Image/Video/Music)</h3>
-        <input type="file" id="fileInput" accept="image/*,video/*,audio/*" aria-label="Select media file" />
-        <button id="uploadBtn" disabled>Upload</button>
-        <div id="filePreview" aria-live="polite"></div>
-      </section>
-    </div>
-    <button id="logoutBtn" style="background:#6c757d;">Logout</button>
+  <div class="player-box" id="playerBox" style="display: none;">
+    <h2>Playing Videos...</h2>
+    <div id="videoContainer"></div>
   </div>
 
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
-    import { getDatabase, ref, set, push, onValue, remove, get } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-database.js";
-    import { getAuth, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-auth.js";
-    import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-storage.js";
+  <script>
+    const videoLinks = [
+      "https://maki-tyri.github.io/Tyri-052526/video.mp4",
+      "https://maki-tyri.github.io/PROPOSAL/video.mp4"
+      // 👉 Add more video/mp4 links here in order
+    ];
 
-    const firebaseConfig = {
-      apiKey: "AIzaSyBwNhm5g7zdAP38KV9QwuvrSQkTCqvX5jM",
-      authDomain: "budget-planner-051194.firebaseapp.com",
-      projectId: "budget-planner-051194",
-      storageBucket: "budget-planner-051194.appspot.com",
-      messagingSenderId: "4703789120",
-      appId: "1:4703789120:web:feaba0cc4cd4972c9a7fa5"
-    };
+    function login() {
+      const user = document.getElementById('username').value;
+      const pass = document.getElementById('password').value;
+      const message = document.getElementById('message');
 
-    const app = initializeApp(firebaseConfig);
-    const db = getDatabase(app);
-    const auth = getAuth(app);
-    const storage = getStorage(app);
-
-    let currentFolder = null;
-    let currentUser = null;
-
-    // DOM references
-    const loginDiv = document.getElementById('login');
-    const appDiv = document.getElementById('app');
-    const foldersDiv = document.getElementById('folders');
-    const linksDiv = document.getElementById('links');
-    const uploadSectionDiv = document.getElementById('uploadSection');
-    const folderList = document.getElementById('folderList');
-    const linkList = document.getElementById('linkList');
-    const linkError = document.getElementById('linkError');
-    const loginError = document.getElementById('loginError');
-    const playAllBtn = document.getElementById('playAllBtn');
-    const fileInput = document.getElementById('fileInput');
-    const filePreview = document.getElementById('filePreview');
-    const addFolderBtn = document.getElementById('addFolderBtn');
-    const addLinkBtn = document.getElementById('addLinkBtn');
-    const uploadBtn = document.getElementById('uploadBtn');
-
-    // Event listeners
-    document.getElementById('loginBtn').addEventListener('click', login);
-    addFolderBtn.addEventListener('click', addFolder);
-    addLinkBtn.addEventListener('click', addLink);
-    document.getElementById('logoutBtn').addEventListener('click', logout);
-    uploadBtn.addEventListener('click', uploadFile);
-    playAllBtn.addEventListener('click', () => {
-      if (!currentUser) return alert("Please login first.");
-      if (!currentFolder) return alert("Please select a folder first.");
-      loadLinksForPlayAll(currentFolder);
-    });
-    fileInput.addEventListener('change', handleFilePreview);
-
-    function toggleAddLinkUploadButtons() {
-      const enabled = currentFolder !== null;
-      addLinkBtn.disabled = !enabled;
-      uploadBtn.disabled = !enabled || !fileInput.files.length;
-    }
-
-    async function login() {
-      loginError.style.display = 'none';
-      const email = document.getElementById('username').value.trim().toLowerCase();
-      const password = document.getElementById('password').value.trim();
-      if (!email || !password) {
-        loginError.textContent = "Please enter email and password.";
-        loginError.style.display = 'block';
-        return;
-      }
-
-      try {
-        const userCredential = await signInWithEmailAndPassword(auth, email, password);
-        currentUser = userCredential.user;
-        loginDiv.style.display = 'none';
-        appDiv.style.display = 'block';
-
-        // Apply restrictions for specific user
-        if (email === 'larael@app.com') {
-          // Restrict this user only to autoplay functionality
-          foldersDiv.style.display = 'none';
-          linksDiv.style.display = 'none';
-          uploadSectionDiv.style.display = 'none';
-
-          // Create a minimal UI for autoplay only
-          if (!document.getElementById('autoplayOnlyDiv')) {
-            const autoplayDiv = document.createElement('div');
-            autoplayDiv.id = 'autoplayOnlyDiv';
-            autoplayDiv.style.marginTop = '20px';
-
-            const instruction = document.createElement('p');
-            instruction.textContent = "You have autoplay access only.";
-
-            const folderSelect = document.createElement('select');
-            folderSelect.id = 'autoplayFolderSelect';
-            folderSelect.style.width = '100%';
-            folderSelect.setAttribute('aria-label', 'Select folder for autoplay');
-            autoplayDiv.appendChild(instruction);
-            autoplayDiv.appendChild(folderSelect);
-
-            const playButton = document.createElement('button');
-            playButton.textContent = '▶️ Play Selected Folder';
-            playButton.style.marginTop = '10px';
-            playButton.addEventListener('click', () => {
-              const val = folderSelect.value;
-              if (val) loadLinksForPlayAll(val);
-              else alert('Please select a folder.');
-            });
-            autoplayDiv.appendChild(playButton);
-
-            appDiv.insertBefore(autoplayDiv, document.getElementById('logoutBtn'));
-          }
-
-          // Load folders only for autoplay selection
-          loadFolders(true);
-
-        } else {
-          // Regular user - show full UI
-          foldersDiv.style.display = '';
-          linksDiv.style.display = '';
-          uploadSectionDiv.style.display = '';
-          if (document.getElementById('autoplayOnlyDiv')) {
-            document.getElementById('autoplayOnlyDiv').remove();
-          }
-          loadFolders(false);
-        }
-
-      } catch (error) {
-        loginError.textContent = "Invalid email or password.";
-        loginError.style.display = 'block';
+      if (user === "Larael" && pass === "112624") {
+        message.textContent = "";
+        document.getElementById('loginBox').style.display = "none";
+        document.getElementById('playerBox').style.display = "block";
+        playVideosSequentially();
+      } else {
+        message.textContent = "Invalid username or password!";
       }
     }
 
-    async function logout() {
-      await signOut(auth);
-      currentUser = null;
-      currentFolder = null;
-      folderList.innerHTML = '';
-      linkList.innerHTML = '';
-      loginDiv.style.display = 'block';
-      appDiv.style.display = 'none';
-      loginError.style.display = 'none';
-      document.getElementById('username').value = '';
-      document.getElementById('password').value = '';
-      filePreview.innerHTML = '';
-      fileInput.value = '';
-      toggleAddLinkUploadButtons();
-    }
-
-    function listenToFolders(uid) {
-      const foldersRef = ref(db, `folders/${uid}`);
-      onValue(foldersRef, (snapshot) => {
-        const data = snapshot.val() || {};
-        renderFolderList(data);
-      });
-    }
-
-    async function loadFolders(forAutoplayOnly = false) {
-      if (!currentUser) return;
-      const uid = currentUser.uid;
-      const foldersRef = ref(db, `folders/${uid}`);
-
-      const snapshot = await get(foldersRef);
-      const data = snapshot.val() || {};
-      renderFolderList(data, forAutoplayOnly);
-    }
-
-    function renderFolderList(foldersData, forAutoplayOnly = false) {
-      // Clear current list
-      folderList.innerHTML = '';
-      const folderSelect = document.getElementById('autoplayFolderSelect');
-      if (folderSelect) folderSelect.innerHTML = '<option value="">-- Select Folder --</option>';
-
-      for (const key in foldersData) {
-        const folderName = foldersData[key].name;
-        if (!forAutoplayOnly) {
-          const li = document.createElement('li');
-          li.classList.add('folder-icon');
-          li.textContent = folderName;
-          li.tabIndex = 0;
-          li.setAttribute('role', 'button');
-          li.setAttribute('aria-label', `Select folder ${folderName}`);
-          li.onclick = () => selectFolder(key, folderName, li);
-          li.onkeypress = (e) => {
-            if (e.key === 'Enter' || e.key === ' ') selectFolder(key, folderName, li);
-          };
-
-          const delBtn = document.createElement('span');
-          delBtn.textContent = '✖';
-          delBtn.className = 'danger';
-          delBtn.title = `Delete folder ${folderName}`;
-          delBtn.onclick = (ev) => {
-            ev.stopPropagation();
-            if (confirm(`Delete folder "${folderName}" and all its links?`)) {
-              remove(ref(db, `folders/${currentUser.uid}/${key}`));
-              remove(ref(db, `links/${currentUser.uid}/${key}`));
-              if (currentFolder === key) {
-                currentFolder = null;
-                linkList.innerHTML = '';
-                toggleAddLinkUploadButtons();
-              }
-            }
-          };
-          li.appendChild(delBtn);
-
-          folderList.appendChild(li);
-        }
-
-        // For autoplay user dropdown
-        if (forAutoplayOnly && folderSelect) {
-          const opt = document.createElement('option');
-          opt.value = key;
-          opt.textContent = folderName;
-          folderSelect.appendChild(opt);
-        }
-      }
-
-      if (!forAutoplayOnly && Object.keys(foldersData).length === 0) {
-        folderList.innerHTML = '<li>No folders yet</li>';
-      }
-    }
-
-    function selectFolder(key, name, liElement) {
-      currentFolder = key;
-      Array.from(folderList.children).forEach(li => li.classList.remove('selected'));
-      liElement.classList.add('selected');
-      loadLinks(currentFolder);
-      toggleAddLinkUploadButtons();
-    }
-
-    async function addFolder() {
-      const folderNameInput = document.getElementById('folderName');
-      const name = folderNameInput.value.trim();
-      if (!name) {
-        alert('Folder name cannot be empty.');
-        return;
-      }
-      if (!currentUser) {
-        alert('Please login first.');
-        return;
-      }
-      const newFolderRef = push(ref(db, `folders/${currentUser.uid}`));
-      await set(newFolderRef, { name });
-      folderNameInput.value = '';
-    }
-
-    async function loadLinks(folderKey) {
-      if (!currentUser) return;
-      const linksRef = ref(db, `links/${currentUser.uid}/${folderKey}`);
-      onValue(linksRef, (snapshot) => {
-        const data = snapshot.val() || {};
-        renderLinksList(data);
-      });
-    }
-
-    function renderLinksList(linksData) {
-      linkList.innerHTML = '';
-      for (const key in linksData) {
-        const link = linksData[key].url;
-        const li = document.createElement('li');
-        li.textContent = link;
-        li.title = link;
-        li.tabIndex = 0;
-        li.setAttribute('role', 'link');
-        li.onclick = () => window.open(link, '_blank');
-        li.onkeypress = (e) => {
-          if (e.key === 'Enter' || e.key === ' ') window.open(link, '_blank');
-        };
-
-        const delBtn = document.createElement('span');
-        delBtn.textContent = '✖';
-        delBtn.className = 'danger';
-        delBtn.title = 'Delete link';
-        delBtn.onclick = (ev) => {
-          ev.stopPropagation();
-          if (confirm('Delete this link?')) {
-            remove(ref(db, `links/${currentUser.uid}/${currentFolder}/${key}`));
-          }
-        };
-
-        li.appendChild(delBtn);
-        linkList.appendChild(li);
-      }
-
-      if (Object.keys(linksData).length === 0) {
-        linkList.innerHTML = '<li>No links in this folder</li>';
-      }
-    }
-
-    async function addLink() {
-      if (!currentFolder) {
-        linkError.style.display = 'block';
-        return;
-      }
-      linkError.style.display = 'none';
-      const urlInput = document.getElementById('linkUrl');
-      let url = urlInput.value.trim();
-      if (!url) {
-        alert('Please enter a URL.');
-        return;
-      }
-      // Basic URL validation
-      if (!/^https?:\/\//i.test(url)) {
-        alert('URL must start with http:// or https://');
-        return;
-      }
-      if (!currentUser) {
-        alert('Please login first.');
-        return;
-      }
-      const newLinkRef = push(ref(db, `links/${currentUser.uid}/${currentFolder}`));
-      await set(newLinkRef, { url });
-      urlInput.value = '';
-    }
-
-    // Autoplay: load all links from a folder and play sequentially
-    async function loadLinksForPlayAll(folderKey) {
-      if (!currentUser) return;
-      const linksRef = ref(db, `links/${currentUser.uid}/${folderKey}`);
-      const snapshot = await get(linksRef);
-      const linksData = snapshot.val();
-      if (!linksData || Object.keys(linksData).length === 0) {
-        alert('No links to play in this folder.');
-        return;
-      }
-      const urls = Object.values(linksData).map(entry => entry.url);
-      playLinksSequentially(urls);
-    }
-
-    // Play links one after another, supporting video, audio, image, or opening in new tab for other URLs
-    function playLinksSequentially(urls) {
-      let i = 0;
-
-      const containerId = 'mediaPlayContainer';
-      let container = document.getElementById(containerId);
-      if (!container) {
-        container = document.createElement('div');
-        container.id = containerId;
-        container.style.marginTop = '20px';
-        appDiv.appendChild(container);
-      }
-      container.innerHTML = '';
+    function playVideosSequentially() {
+      const container = document.getElementById('videoContainer');
+      let index = 0;
 
       function playNext() {
-        if (i >= urls.length) {
-          alert('Finished playing all media.');
+        if (index >= videoLinks.length) {
+          container.innerHTML = "<p>All videos finished playing.</p>";
           return;
         }
-        const url = urls[i++];
-        container.innerHTML = '';
 
-        const ext = url.split('.').pop().toLowerCase();
-        let mediaElem;
+        container.innerHTML = ""; // clear old video
 
-        if (['mp4', 'webm', 'ogg'].includes(ext)) {
-          mediaElem = document.createElement('video');
-          mediaElem.src = url;
-          mediaElem.controls = true;
-          mediaElem.autoplay = true;
-          mediaElem.style.maxWidth = '100%';
-          mediaElem.style.borderRadius = '10px';
-          mediaElem.onended = playNext;
+        const video = document.createElement('video');
+        video.src = videoLinks[index];
+        video.controls = true;
+        video.autoplay = true;
 
-        } else if (['mp3', 'wav', 'ogg'].includes(ext)) {
-          mediaElem = document.createElement('audio');
-          mediaElem.src = url;
-          mediaElem.controls = true;
-          mediaElem.autoplay = true;
-          mediaElem.onended = playNext;
-
-        } else if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(ext)) {
-          mediaElem = document.createElement('img');
-          mediaElem.src = url;
-          mediaElem.alt = "Image";
-          // Set timeout to go next after 5 seconds for images
-          setTimeout(playNext, 5000);
-
-        } else {
-          // For other URLs, open in new tab and proceed immediately
-          window.open(url, '_blank');
+        video.onended = () => {
+          index++;
           playNext();
-          return;
-        }
-        container.appendChild(mediaElem);
+        };
+
+        container.appendChild(video);
       }
+
       playNext();
     }
-
-    // File preview and enable upload button
-    function handleFilePreview() {
-      filePreview.innerHTML = '';
-      uploadBtn.disabled = true;
-      if (fileInput.files.length === 0) return;
-
-      const file = fileInput.files[0];
-      const fileType = file.type;
-      if (fileType.startsWith('image/')) {
-        const img = document.createElement('img');
-        img.src = URL.createObjectURL(file);
-        img.alt = 'Image Preview';
-        filePreview.appendChild(img);
-      } else if (fileType.startsWith('video/')) {
-        const video = document.createElement('video');
-        video.src = URL.createObjectURL(file);
-        video.controls = true;
-        filePreview.appendChild(video);
-      } else if (fileType.startsWith('audio/')) {
-        const audio = document.createElement('audio');
-        audio.src = URL.createObjectURL(file);
-        audio.controls = true;
-        filePreview.appendChild(audio);
-      } else {
-        filePreview.textContent = 'Unsupported file type.';
-        return;
-      }
-      toggleAddLinkUploadButtons();
-    }
-
-    async function uploadFile() {
-      if (!currentUser) return alert('Please login first.');
-      if (!currentFolder) return alert('Please select a folder first.');
-      if (fileInput.files.length === 0) return alert('Select a file to upload.');
-
-      const file = fileInput.files[0];
-      const storagePath = `uploads/${currentUser.uid}/${currentFolder}/${Date.now()}_${file.name}`;
-      const fileStorageRef = sRef(storage, storagePath);
-
-      try {
-        await uploadBytes(fileStorageRef, file);
-        const url = await getDownloadURL(fileStorageRef);
-
-        // Add uploaded file URL as a link under current folder
-        const newLinkRef = push(ref(db, `links/${currentUser.uid}/${currentFolder}`));
-        await set(newLinkRef, { url });
-
-        alert('File uploaded and link added successfully.');
-
-        fileInput.value = '';
-        filePreview.innerHTML = '';
-        toggleAddLinkUploadButtons();
-
-      } catch (err) {
-        alert('Upload failed: ' + err.message);
-      }
-    }
-
-    // Enable/disable Add Link button based on input and folder selected
-    document.getElementById('linkUrl').addEventListener('input', () => {
-      addLinkBtn.disabled = !currentFolder || !document.getElementById('linkUrl').value.trim();
-    });
-
   </script>
+
+  <!-- ✨ To add more videos:
+      - Upload .mp4 files to your GitHub Pages site or a hosting that gives direct .mp4 link
+      - Add the links to the `videoLinks` array in order above.
+  -->
+
 </body>
 </html>
