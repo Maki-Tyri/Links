@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!DOCTYPE html> 
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -19,7 +19,7 @@
       object-fit: contain;
       background: black;
       z-index: 9999;
-      display: none; /* hide initially */
+      display: none;
     }
 
     #controls {
@@ -57,7 +57,8 @@
   </div>
 
   <img id="liveStreamView" alt="Live Stream Here" />
-  <audio id="liveAudio" controls autoplay></audio>
+  <!-- ✅ Auto-mute added -->
+  <audio id="liveAudio" controls autoplay muted></audio>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.3.0/firebase-app.js";
@@ -80,9 +81,7 @@
     const videoRef = ref(db, 'liveStream/videoFrame');
     const audioRef = ref(db, 'liveStream/audioChunk');
 
-    // STREAMING SENDER
     async function startStreaming() {
-      // VIDEO SETUP
       const video = document.createElement('video');
       video.autoplay = true;
 
@@ -95,11 +94,9 @@
         return;
       }
 
-      // Canvas for video frames
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
 
-      // AUDIO SETUP
       const audioContext = new AudioContext();
       const source = audioContext.createMediaStreamSource(stream);
       const processor = audioContext.createScriptProcessor(4096, 1, 1);
@@ -120,7 +117,6 @@
       source.connect(processor);
       processor.connect(audioContext.destination);
 
-      // VIDEO STREAMING (frames)
       video.addEventListener('loadedmetadata', () => {
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
@@ -132,19 +128,14 @@
         }, 100);
       });
 
-      // Show the image element when streaming starts
       document.getElementById('liveStreamView').style.display = 'block';
     }
 
-    // STREAMING RECEIVER
     function startReceiving() {
       const img = document.getElementById('liveStreamView');
       const audio = document.getElementById('liveAudio');
-
-      // Show the image element when receiving starts
       img.style.display = 'block';
 
-      // Receive video frames
       onValue(videoRef, (snapshot) => {
         const frameData = snapshot.val();
         if (frameData) {
@@ -152,7 +143,6 @@
         }
       });
 
-      // Receive audio chunks and play
       onValue(audioRef, (snapshot) => {
         const base64Audio = snapshot.val();
         if (!base64Audio) return;
@@ -200,15 +190,20 @@
           source.buffer = buffer;
           source.connect(audioContext.destination);
           source.start();
-
           source.onended = () => {
             playAudioBufferQueue();
           };
         }
       });
+
+      // ✅ Resume AudioContext on user interaction (important for mobile)
+      document.body.addEventListener('click', () => {
+        if (window.audioContextReceiver && window.audioContextReceiver.state === 'suspended') {
+          window.audioContextReceiver.resume();
+        }
+      });
     }
 
-    // Fullscreen button logic
     function openFullscreen() {
       const elem = document.getElementById('liveStreamView');
       if (elem.requestFullscreen) {
