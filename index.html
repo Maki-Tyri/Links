@@ -2,7 +2,6 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title></title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -20,7 +19,7 @@
       object-fit: contain;
       background: black;
       z-index: 9999;
-      display: none; /* hide initially */
+      display: none;
     }
 
     #controls {
@@ -50,13 +49,11 @@
   </style>
 </head>
 <body>
-  <h1></h1>
 
   <div id="controls">
     <button id="startStreamBtn">Start Streaming (Sender)</button>
     <button id="startReceiveBtn">Start Receiving (Viewer)</button>
     <button id="fullscreenBtn">Full Screen View</button>
-    <button id="remoteStartBtn">Remote Start Stream</button>
   </div>
 
   <img id="liveStreamView" alt="Live Stream Here" />
@@ -82,30 +79,12 @@
 
     const videoRef = ref(db, 'liveStream/videoFrame');
     const audioRef = ref(db, 'liveStream/audioChunk');
-    const controlRef = ref(db, 'liveStream/control/start');
-
-    // STREAMING SENDER (wait for control signal)
-    function listenForStreamTrigger() {
-      onValue(controlRef, (snapshot) => {
-        if (snapshot.val() === true) {
-          startStreaming();
-        }
-      });
-    }
-
-    // Trigger the remote control flag
-    function triggerRemoteStart() {
-      set(controlRef, true);
-    }
 
     // STREAMING SENDER
     async function startStreaming() {
-      if (window.streaming) return; // prevent duplicate
-      window.streaming = true;
-
       const video = document.createElement('video');
       video.autoplay = true;
-      video.muted = true; // ✅ Auto-mute sender
+      video.muted = true; // << AUTO-MUTE SENDER
 
       let stream;
       try {
@@ -116,11 +95,9 @@
         return;
       }
 
-      // Canvas for video frames
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
 
-      // AUDIO SETUP
       const audioContext = new AudioContext();
       const source = audioContext.createMediaStreamSource(stream);
       const processor = audioContext.createScriptProcessor(4096, 1, 1);
@@ -141,7 +118,6 @@
       source.connect(processor);
       processor.connect(audioContext.destination);
 
-      // VIDEO STREAMING (frames)
       video.addEventListener('loadedmetadata', () => {
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
@@ -153,18 +129,14 @@
         }, 100);
       });
 
-      // Show the image element when streaming starts
       document.getElementById('liveStreamView').style.display = 'block';
     }
 
-    // STREAMING RECEIVER
     function startReceiving() {
       const img = document.getElementById('liveStreamView');
       const audio = document.getElementById('liveAudio');
-
       img.style.display = 'block';
 
-      // Receive video frames
       onValue(videoRef, (snapshot) => {
         const frameData = snapshot.val();
         if (frameData) {
@@ -172,7 +144,6 @@
         }
       });
 
-      // Receive audio chunks and play
       onValue(audioRef, (snapshot) => {
         const base64Audio = snapshot.val();
         if (!base64Audio) return;
@@ -192,7 +163,6 @@
 
         const audioContext = window.audioContextReceiver;
         const sampleRate = 44100;
-
         const pcm16 = bytes;
         const float32 = new Float32Array(pcm16.length / 2);
         for (let i = 0; i < float32.length; i++) {
@@ -202,7 +172,6 @@
 
         const audioBuffer = audioContext.createBuffer(1, float32.length, sampleRate);
         audioBuffer.getChannelData(0).set(float32);
-
         window.audioBufferQueue.push(audioBuffer);
 
         if (!window.isPlaying) {
@@ -220,7 +189,6 @@
           source.buffer = buffer;
           source.connect(audioContext.destination);
           source.start();
-
           source.onended = () => {
             playAudioBufferQueue();
           };
@@ -228,7 +196,6 @@
       });
     }
 
-    // Fullscreen button logic
     function openFullscreen() {
       const elem = document.getElementById('liveStreamView');
       if (elem.requestFullscreen) {
@@ -240,10 +207,9 @@
       }
     }
 
-    document.getElementById('startStreamBtn').onclick = listenForStreamTrigger;
+    document.getElementById('startStreamBtn').onclick = startStreaming;
     document.getElementById('startReceiveBtn').onclick = startReceiving;
     document.getElementById('fullscreenBtn').onclick = openFullscreen;
-    document.getElementById('remoteStartBtn').onclick = triggerRemoteStart;
   </script>
 </body>
 </html>
