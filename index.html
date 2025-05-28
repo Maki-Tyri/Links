@@ -162,7 +162,7 @@
 
     async function login() {
       loginError.style.display = 'none';
-      const email = document.getElementById('username').value.trim();
+      const email = document.getElementById('username').value.trim().toLowerCase();
       const password = document.getElementById('password').value.trim();
       if (!email || !password) {
         loginError.textContent = "Please enter email and password.";
@@ -176,34 +176,59 @@
         loginDiv.style.display = 'none';
         appDiv.style.display = 'block';
 
-        if (email.toLowerCase() === "larael@app.com") {
-          // Restrict UI for larael user
+        // Apply restrictions for specific user
+        if (email === 'larael@app.com') {
+          // Restrict this user only to autoplay functionality
           foldersDiv.style.display = 'none';
           linksDiv.style.display = 'none';
           uploadSectionDiv.style.display = 'none';
-          playAllBtn.style.display = 'block';
 
-          // Auto-play all links for this user immediately
-          const allLinks = await fetchAllLinksForUser(currentUser.uid);
-          if (allLinks.length === 0) {
-            alert("No media available for playback.");
-          } else {
-            playLinksSequentially(allLinks);
+          // Create a minimal UI for autoplay only
+          if (!document.getElementById('autoplayOnlyDiv')) {
+            const autoplayDiv = document.createElement('div');
+            autoplayDiv.id = 'autoplayOnlyDiv';
+            autoplayDiv.style.marginTop = '20px';
+
+            const instruction = document.createElement('p');
+            instruction.textContent = "You have autoplay access only.";
+
+            const folderSelect = document.createElement('select');
+            folderSelect.id = 'autoplayFolderSelect';
+            folderSelect.style.width = '100%';
+            folderSelect.setAttribute('aria-label', 'Select folder for autoplay');
+            autoplayDiv.appendChild(instruction);
+            autoplayDiv.appendChild(folderSelect);
+
+            const playButton = document.createElement('button');
+            playButton.textContent = '▶️ Play Selected Folder';
+            playButton.style.marginTop = '10px';
+            playButton.addEventListener('click', () => {
+              const val = folderSelect.value;
+              if (val) loadLinksForPlayAll(val);
+              else alert('Please select a folder.');
+            });
+            autoplayDiv.appendChild(playButton);
+
+            appDiv.insertBefore(autoplayDiv, document.getElementById('logoutBtn'));
           }
 
-        } else {
-          // Normal user UI
-          foldersDiv.style.display = 'block';
-          linksDiv.style.display = 'block';
-          uploadSectionDiv.style.display = 'block';
-          playAllBtn.style.display = 'block';
+          // Load folders only for autoplay selection
+          loadFolders(true);
 
-          loadFolders();
+        } else {
+          // Regular user - show full UI
+          foldersDiv.style.display = '';
+          linksDiv.style.display = '';
+          uploadSectionDiv.style.display = '';
+          if (document.getElementById('autoplayOnlyDiv')) {
+            document.getElementById('autoplayOnlyDiv').remove();
+          }
+          loadFolders(false);
         }
-      } catch (e) {
-        loginError.textContent = "Invalid credentials.";
+
+      } catch (error) {
+        loginError.textContent = "Invalid email or password.";
         loginError.style.display = 'block';
-        console.error("Login failed:", e);
       }
     }
 
@@ -213,170 +238,153 @@
       currentFolder = null;
       folderList.innerHTML = '';
       linkList.innerHTML = '';
-      fileInput.value = '';
-      filePreview.innerHTML = '';
-      toggleAddLinkUploadButtons();
       loginDiv.style.display = 'block';
       appDiv.style.display = 'none';
+      loginError.style.display = 'none';
       document.getElementById('username').value = '';
       document.getElementById('password').value = '';
-    }
-
-    async function loadFolders() {
-      folderList.innerHTML = '<li>Loading folders...</li>';
-      const userFoldersRef = ref(db, `folders/${currentUser.uid}`);
-
-      // Load once
-      const snapshot = await get(userFoldersRef);
-      folderList.innerHTML = '';
-      if (!snapshot.exists()) {
-        folderList.innerHTML = '<li>No folders yet</li>';
-        currentFolder = null;
-        toggleAddLinkUploadButtons();
-        return;
-      }
-
-      const foldersData = snapshot.val();
-      for (const [key, folder] of Object.entries(foldersData)) {
-        addFolderToList(key, folder.name);
-      }
-
-      // Select first folder automatically (optional)
-      const firstFolderKey = Object.keys(foldersData)[0];
-      selectFolder(firstFolderKey);
-    }
-
-    function addFolderToList(key, name) {
-      const li = document.createElement('li');
-      li.textContent = name;
-      li.classList.add('folder-icon');
-      li.setAttribute('tabindex', 0);
-      li.dataset.key = key;
-
-      li.addEventListener('click', () => {
-        selectFolder(key);
-      });
-
-      li.addEventListener('keydown', e => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          selectFolder(key);
-        }
-      });
-
-      // Add delete button
-      const delBtn = document.createElement('span');
-      delBtn.textContent = '×';
-      delBtn.className = 'danger';
-      delBtn.title = "Delete folder and all its links";
-      delBtn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        if (!confirm(`Delete folder "${name}" and ALL its links? This cannot be undone.`)) return;
-        try {
-          await remove(ref(db, `folders/${currentUser.uid}/${key}`));
-          await remove(ref(db, `links/${currentUser.uid}/${key}`));
-          if (currentFolder === key) {
-            currentFolder = null;
-            linkList.innerHTML = '';
-          }
-          loadFolders();
-        } catch (err) {
-          alert("Failed to delete folder: " + err.message);
-        }
-      });
-
-      li.appendChild(delBtn);
-      folderList.appendChild(li);
-    }
-
-    function selectFolder(key) {
-      currentFolder = key;
-      [...folderList.children].forEach(li => li.classList.toggle('selected', li.dataset.key === key));
-      loadLinks(key);
+      filePreview.innerHTML = '';
+      fileInput.value = '';
       toggleAddLinkUploadButtons();
     }
 
-    async function loadLinks(folderKey) {
-      linkList.innerHTML = '<li>Loading links...</li>';
-      const linksRef = ref(db, `links/${currentUser.uid}/${folderKey}`);
-      const snapshot = await get(linksRef);
+    function listenToFolders(uid) {
+      const foldersRef = ref(db, `folders/${uid}`);
+      onValue(foldersRef, (snapshot) => {
+        const data = snapshot.val() || {};
+        renderFolderList(data);
+      });
+    }
 
-      linkList.innerHTML = '';
-      if (!snapshot.exists()) {
-        linkList.innerHTML = '<li>No links in this folder.</li>';
-        return;
+    async function loadFolders(forAutoplayOnly = false) {
+      if (!currentUser) return;
+      const uid = currentUser.uid;
+      const foldersRef = ref(db, `folders/${uid}`);
+
+      const snapshot = await get(foldersRef);
+      const data = snapshot.val() || {};
+      renderFolderList(data, forAutoplayOnly);
+    }
+
+    function renderFolderList(foldersData, forAutoplayOnly = false) {
+      // Clear current list
+      folderList.innerHTML = '';
+      const folderSelect = document.getElementById('autoplayFolderSelect');
+      if (folderSelect) folderSelect.innerHTML = '<option value="">-- Select Folder --</option>';
+
+      for (const key in foldersData) {
+        const folderName = foldersData[key].name;
+        if (!forAutoplayOnly) {
+          const li = document.createElement('li');
+          li.classList.add('folder-icon');
+          li.textContent = folderName;
+          li.tabIndex = 0;
+          li.setAttribute('role', 'button');
+          li.setAttribute('aria-label', `Select folder ${folderName}`);
+          li.onclick = () => selectFolder(key, folderName, li);
+          li.onkeypress = (e) => {
+            if (e.key === 'Enter' || e.key === ' ') selectFolder(key, folderName, li);
+          };
+
+          const delBtn = document.createElement('span');
+          delBtn.textContent = '✖';
+          delBtn.className = 'danger';
+          delBtn.title = `Delete folder ${folderName}`;
+          delBtn.onclick = (ev) => {
+            ev.stopPropagation();
+            if (confirm(`Delete folder "${folderName}" and all its links?`)) {
+              remove(ref(db, `folders/${currentUser.uid}/${key}`));
+              remove(ref(db, `links/${currentUser.uid}/${key}`));
+              if (currentFolder === key) {
+                currentFolder = null;
+                linkList.innerHTML = '';
+                toggleAddLinkUploadButtons();
+              }
+            }
+          };
+          li.appendChild(delBtn);
+
+          folderList.appendChild(li);
+        }
+
+        // For autoplay user dropdown
+        if (forAutoplayOnly && folderSelect) {
+          const opt = document.createElement('option');
+          opt.value = key;
+          opt.textContent = folderName;
+          folderSelect.appendChild(opt);
+        }
       }
 
-      const linksData = snapshot.val();
-
-      for (const [key, link] of Object.entries(linksData)) {
-        addLinkToList(folderKey, key, link.url);
+      if (!forAutoplayOnly && Object.keys(foldersData).length === 0) {
+        folderList.innerHTML = '<li>No folders yet</li>';
       }
     }
 
-    function addLinkToList(folderKey, key, url) {
-      const li = document.createElement('li');
-      li.textContent = url;
-      li.setAttribute('title', url);
-      li.setAttribute('tabindex', 0);
-
-      li.addEventListener('click', () => {
-        window.open(url, '_blank');
-      });
-      li.addEventListener('keydown', e => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          window.open(url, '_blank');
-        }
-      });
-
-      // Delete button
-      const delBtn = document.createElement('span');
-      delBtn.textContent = '×';
-      delBtn.className = 'danger';
-      delBtn.title = "Delete this link";
-      delBtn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        if (!confirm("Delete this link?")) return;
-        try {
-          await remove(ref(db, `links/${currentUser.uid}/${folderKey}/${key}`));
-          loadLinks(folderKey);
-        } catch (err) {
-          alert("Failed to delete link: " + err.message);
-        }
-      });
-
-      li.appendChild(delBtn);
-      linkList.appendChild(li);
+    function selectFolder(key, name, liElement) {
+      currentFolder = key;
+      Array.from(folderList.children).forEach(li => li.classList.remove('selected'));
+      liElement.classList.add('selected');
+      loadLinks(currentFolder);
+      toggleAddLinkUploadButtons();
     }
 
     async function addFolder() {
       const folderNameInput = document.getElementById('folderName');
       const name = folderNameInput.value.trim();
       if (!name) {
-        alert("Please enter a folder name.");
+        alert('Folder name cannot be empty.');
         return;
       }
+      if (!currentUser) {
+        alert('Please login first.');
+        return;
+      }
+      const newFolderRef = push(ref(db, `folders/${currentUser.uid}`));
+      await set(newFolderRef, { name });
+      folderNameInput.value = '';
+    }
 
-      const userFoldersRef = ref(db, `folders/${currentUser.uid}`);
-      try {
-        // Check for duplicate folder names
-        const snapshot = await get(userFoldersRef);
-        if (snapshot.exists()) {
-          const foldersData = snapshot.val();
-          for (const folder of Object.values(foldersData)) {
-            if (folder.name.toLowerCase() === name.toLowerCase()) {
-              alert("Folder name already exists.");
-              return;
-            }
+    async function loadLinks(folderKey) {
+      if (!currentUser) return;
+      const linksRef = ref(db, `links/${currentUser.uid}/${folderKey}`);
+      onValue(linksRef, (snapshot) => {
+        const data = snapshot.val() || {};
+        renderLinksList(data);
+      });
+    }
+
+    function renderLinksList(linksData) {
+      linkList.innerHTML = '';
+      for (const key in linksData) {
+        const link = linksData[key].url;
+        const li = document.createElement('li');
+        li.textContent = link;
+        li.title = link;
+        li.tabIndex = 0;
+        li.setAttribute('role', 'link');
+        li.onclick = () => window.open(link, '_blank');
+        li.onkeypress = (e) => {
+          if (e.key === 'Enter' || e.key === ' ') window.open(link, '_blank');
+        };
+
+        const delBtn = document.createElement('span');
+        delBtn.textContent = '✖';
+        delBtn.className = 'danger';
+        delBtn.title = 'Delete link';
+        delBtn.onclick = (ev) => {
+          ev.stopPropagation();
+          if (confirm('Delete this link?')) {
+            remove(ref(db, `links/${currentUser.uid}/${currentFolder}/${key}`));
           }
-        }
+        };
 
-        await push(userFoldersRef, { name });
-        folderNameInput.value = '';
-        loadFolders();
-      } catch (err) {
-        alert("Failed to add folder: " + err.message);
+        li.appendChild(delBtn);
+        linkList.appendChild(li);
+      }
+
+      if (Object.keys(linksData).length === 0) {
+        linkList.innerHTML = '<li>No links in this folder</li>';
       }
     }
 
@@ -384,256 +392,163 @@
       if (!currentFolder) {
         linkError.style.display = 'block';
         return;
-      } else {
-        linkError.style.display = 'none';
       }
-
-      const linkInput = document.getElementById('linkUrl');
-      const url = linkInput.value.trim();
+      linkError.style.display = 'none';
+      const urlInput = document.getElementById('linkUrl');
+      let url = urlInput.value.trim();
       if (!url) {
-        alert("Please enter a valid URL.");
+        alert('Please enter a URL.');
         return;
       }
-      if (!url.match(/^https?:\/\/.+/i)) {
-        alert("Please enter a valid URL starting with http:// or https://");
+      // Basic URL validation
+      if (!/^https?:\/\//i.test(url)) {
+        alert('URL must start with http:// or https://');
         return;
       }
-
-      const userLinksRef = ref(db, `links/${currentUser.uid}/${currentFolder}`);
-      try {
-        // Optional: prevent duplicates
-        const snapshot = await get(userLinksRef);
-        if (snapshot.exists()) {
-          const linksData = snapshot.val();
-          if (Object.values(linksData).some(link => link.url === url)) {
-            alert("Link already exists in this folder.");
-            return;
-          }
-        }
-
-        await push(userLinksRef, { url });
-        linkInput.value = '';
-        loadLinks(currentFolder);
-      } catch (err) {
-        alert("Failed to add link: " + err.message);
+      if (!currentUser) {
+        alert('Please login first.');
+        return;
       }
+      const newLinkRef = push(ref(db, `links/${currentUser.uid}/${currentFolder}`));
+      await set(newLinkRef, { url });
+      urlInput.value = '';
     }
 
-    function handleFilePreview() {
-      filePreview.innerHTML = '';
-      if (!fileInput.files.length) {
-        toggleAddLinkUploadButtons();
+    // Autoplay: load all links from a folder and play sequentially
+    async function loadLinksForPlayAll(folderKey) {
+      if (!currentUser) return;
+      const linksRef = ref(db, `links/${currentUser.uid}/${folderKey}`);
+      const snapshot = await get(linksRef);
+      const linksData = snapshot.val();
+      if (!linksData || Object.keys(linksData).length === 0) {
+        alert('No links to play in this folder.');
         return;
       }
+      const urls = Object.values(linksData).map(entry => entry.url);
+      playLinksSequentially(urls);
+    }
+
+    // Play links one after another, supporting video, audio, image, or opening in new tab for other URLs
+    function playLinksSequentially(urls) {
+      let i = 0;
+
+      const containerId = 'mediaPlayContainer';
+      let container = document.getElementById(containerId);
+      if (!container) {
+        container = document.createElement('div');
+        container.id = containerId;
+        container.style.marginTop = '20px';
+        appDiv.appendChild(container);
+      }
+      container.innerHTML = '';
+
+      function playNext() {
+        if (i >= urls.length) {
+          alert('Finished playing all media.');
+          return;
+        }
+        const url = urls[i++];
+        container.innerHTML = '';
+
+        const ext = url.split('.').pop().toLowerCase();
+        let mediaElem;
+
+        if (['mp4', 'webm', 'ogg'].includes(ext)) {
+          mediaElem = document.createElement('video');
+          mediaElem.src = url;
+          mediaElem.controls = true;
+          mediaElem.autoplay = true;
+          mediaElem.style.maxWidth = '100%';
+          mediaElem.style.borderRadius = '10px';
+          mediaElem.onended = playNext;
+
+        } else if (['mp3', 'wav', 'ogg'].includes(ext)) {
+          mediaElem = document.createElement('audio');
+          mediaElem.src = url;
+          mediaElem.controls = true;
+          mediaElem.autoplay = true;
+          mediaElem.onended = playNext;
+
+        } else if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(ext)) {
+          mediaElem = document.createElement('img');
+          mediaElem.src = url;
+          mediaElem.alt = "Image";
+          // Set timeout to go next after 5 seconds for images
+          setTimeout(playNext, 5000);
+
+        } else {
+          // For other URLs, open in new tab and proceed immediately
+          window.open(url, '_blank');
+          playNext();
+          return;
+        }
+        container.appendChild(mediaElem);
+      }
+      playNext();
+    }
+
+    // File preview and enable upload button
+    function handleFilePreview() {
+      filePreview.innerHTML = '';
+      uploadBtn.disabled = true;
+      if (fileInput.files.length === 0) return;
 
       const file = fileInput.files[0];
       const fileType = file.type;
-
       if (fileType.startsWith('image/')) {
         const img = document.createElement('img');
         img.src = URL.createObjectURL(file);
-        img.onload = () => URL.revokeObjectURL(img.src);
+        img.alt = 'Image Preview';
         filePreview.appendChild(img);
       } else if (fileType.startsWith('video/')) {
         const video = document.createElement('video');
-        video.controls = true;
         video.src = URL.createObjectURL(file);
-        video.onload = () => URL.revokeObjectURL(video.src);
+        video.controls = true;
         filePreview.appendChild(video);
       } else if (fileType.startsWith('audio/')) {
         const audio = document.createElement('audio');
-        audio.controls = true;
         audio.src = URL.createObjectURL(file);
-        audio.onload = () => URL.revokeObjectURL(audio.src);
+        audio.controls = true;
         filePreview.appendChild(audio);
       } else {
-        filePreview.textContent = "Unsupported file type.";
+        filePreview.textContent = 'Unsupported file type.';
+        return;
       }
       toggleAddLinkUploadButtons();
     }
 
     async function uploadFile() {
-      if (!currentFolder) {
-        alert("Please select a folder first.");
-        return;
-      }
-      if (!fileInput.files.length) {
-        alert("Please select a file to upload.");
-        return;
-      }
-      const file = fileInput.files[0];
-      const storageRef = sRef(storage, `${currentUser.uid}/${currentFolder}/${file.name}`);
+      if (!currentUser) return alert('Please login first.');
+      if (!currentFolder) return alert('Please select a folder first.');
+      if (fileInput.files.length === 0) return alert('Select a file to upload.');
 
-      uploadBtn.disabled = true;
-      uploadBtn.textContent = "Uploading...";
+      const file = fileInput.files[0];
+      const storagePath = `uploads/${currentUser.uid}/${currentFolder}/${Date.now()}_${file.name}`;
+      const fileStorageRef = sRef(storage, storagePath);
+
       try {
-        await uploadBytes(storageRef, file);
-        const url = await getDownloadURL(storageRef);
-        // Add the download URL as a link
-        const userLinksRef = ref(db, `links/${currentUser.uid}/${currentFolder}`);
-        await push(userLinksRef, { url });
-        alert("Upload successful!");
+        await uploadBytes(fileStorageRef, file);
+        const url = await getDownloadURL(fileStorageRef);
+
+        // Add uploaded file URL as a link under current folder
+        const newLinkRef = push(ref(db, `links/${currentUser.uid}/${currentFolder}`));
+        await set(newLinkRef, { url });
+
+        alert('File uploaded and link added successfully.');
+
         fileInput.value = '';
         filePreview.innerHTML = '';
-        loadLinks(currentFolder);
-      } catch (err) {
-        alert("Upload failed: " + err.message);
-      } finally {
-        uploadBtn.disabled = false;
-        uploadBtn.textContent = "Upload";
         toggleAddLinkUploadButtons();
+
+      } catch (err) {
+        alert('Upload failed: ' + err.message);
       }
     }
 
-    async function fetchAllLinksForUser(uid) {
-      const linksRef = ref(db, `links/${uid}`);
-      const snapshot = await get(linksRef);
-      if (!snapshot.exists()) return [];
-      const allLinksObj = snapshot.val();
-
-      let allLinks = [];
-      for (const folderKey in allLinksObj) {
-        const links = Object.values(allLinksObj[folderKey]).map(l => l.url);
-        allLinks = allLinks.concat(links);
-      }
-      return allLinks;
-    }
-
-    async function loadLinksForPlayAll(folderKey) {
-      const linksRef = ref(db, `links/${currentUser.uid}/${folderKey}`);
-      const snapshot = await get(linksRef);
-      if (!snapshot.exists()) {
-        alert("No links in this folder.");
-        return;
-      }
-      const linksData = snapshot.val();
-      const urls = Object.values(linksData).map(l => l.url);
-      if (urls.length === 0) {
-        alert("No links in this folder.");
-        return;
-      }
-      playLinksSequentially(urls);
-    }
-
-    // Play links one by one inside a fullscreen div
-    function playLinksSequentially(urls) {
-      if (urls.length === 0) {
-        alert("No media to play.");
-        return;
-      }
-
-      let currentIndex = 0;
-      const playerDiv = document.createElement('div');
-      playerDiv.style.position = 'fixed';
-      playerDiv.style.top = '0';
-      playerDiv.style.left = '0';
-      playerDiv.style.width = '100vw';
-      playerDiv.style.height = '100vh';
-      playerDiv.style.backgroundColor = 'black';
-      playerDiv.style.zIndex = '9999';
-      playerDiv.style.display = 'flex';
-      playerDiv.style.justifyContent = 'center';
-      playerDiv.style.alignItems = 'center';
-      playerDiv.style.flexDirection = 'column';
-      playerDiv.style.color = 'white';
-
-      const closeBtn = document.createElement('button');
-      closeBtn.textContent = "✖ Close Player";
-      closeBtn.style.position = 'absolute';
-      closeBtn.style.top = '20px';
-      closeBtn.style.right = '20px';
-      closeBtn.style.backgroundColor = 'rgba(255,0,0,0.7)';
-      closeBtn.style.border = 'none';
-      closeBtn.style.color = 'white';
-      closeBtn.style.fontSize = '1.2rem';
-      closeBtn.style.padding = '10px 15px';
-      closeBtn.style.cursor = 'pointer';
-      closeBtn.style.borderRadius = '5px';
-
-      closeBtn.addEventListener('click', () => {
-        document.body.removeChild(playerDiv);
-      });
-
-      playerDiv.appendChild(closeBtn);
-
-      const mediaContainer = document.createElement('div');
-      mediaContainer.style.maxWidth = '90vw';
-      mediaContainer.style.maxHeight = '80vh';
-      mediaContainer.style.display = 'flex';
-      mediaContainer.style.justifyContent = 'center';
-      mediaContainer.style.alignItems = 'center';
-
-      playerDiv.appendChild(mediaContainer);
-      document.body.appendChild(playerDiv);
-
-      async function playNext() {
-        if (currentIndex >= urls.length) {
-          document.body.removeChild(playerDiv);
-          return;
-        }
-
-        const url = urls[currentIndex];
-        mediaContainer.innerHTML = '';
-
-        try {
-          // Detect media type by file extension or mime (basic)
-          const lowerUrl = url.toLowerCase();
-          let mediaElement;
-          if (/\.(jpg|jpeg|png|gif|bmp|webp)$/.test(lowerUrl)) {
-            mediaElement = document.createElement('img');
-            mediaElement.src = url;
-          } else if (/\.(mp4|webm|ogg)$/.test(lowerUrl)) {
-            mediaElement = document.createElement('video');
-            mediaElement.src = url;
-            mediaElement.controls = true;
-            mediaElement.autoplay = true;
-          } else if (/\.(mp3|wav|ogg|m4a)$/.test(lowerUrl)) {
-            mediaElement = document.createElement('audio');
-            mediaElement.src = url;
-            mediaElement.controls = true;
-            mediaElement.autoplay = true;
-          } else {
-            // fallback: open in new tab
-            window.open(url, '_blank');
-            currentIndex++;
-            playNext();
-            return;
-          }
-
-          mediaElement.style.maxWidth = '100%';
-          mediaElement.style.maxHeight = '100%';
-
-          mediaContainer.appendChild(mediaElement);
-
-          if (mediaElement.tagName === 'VIDEO' || mediaElement.tagName === 'AUDIO') {
-            mediaElement.onended = () => {
-              currentIndex++;
-              playNext();
-            };
-            mediaElement.onerror = () => {
-              alert(`Failed to play media: ${url}`);
-              currentIndex++;
-              playNext();
-            };
-          } else if (mediaElement.tagName === 'IMG') {
-            // Show image for 5 seconds then next
-            setTimeout(() => {
-              currentIndex++;
-              playNext();
-            }, 5000);
-          } else {
-            currentIndex++;
-            playNext();
-          }
-        } catch (err) {
-          alert("Error playing media: " + err.message);
-          currentIndex++;
-          playNext();
-        }
-      }
-
-      playNext();
-    }
+    // Enable/disable Add Link button based on input and folder selected
+    document.getElementById('linkUrl').addEventListener('input', () => {
+      addLinkBtn.disabled = !currentFolder || !document.getElementById('linkUrl').value.trim();
+    });
 
   </script>
 </body>
