@@ -54,11 +54,12 @@
     <button id="startStreamBtn">Start Streaming (Sender)</button>
     <button id="startReceiveBtn">Start Receiving (Viewer)</button>
     <button id="fullscreenBtn">Full Screen View</button>
+    <button id="unmuteBtn" style="display:none;">Unmute Audio</button>
   </div>
 
   <img id="liveStreamView" alt="Live Stream Here" />
-  <!-- ✅ Auto-mute added -->
-  <audio id="liveAudio" controls autoplay muted></audio>
+  <!-- no need for muted audio tag, we're using GainNode now -->
+  <audio id="liveAudio" controls autoplay style="display:none;"></audio>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.3.0/firebase-app.js";
@@ -133,8 +134,8 @@
 
     function startReceiving() {
       const img = document.getElementById('liveStreamView');
-      const audio = document.getElementById('liveAudio');
       img.style.display = 'block';
+      document.getElementById('unmuteBtn').style.display = 'inline-block';
 
       onValue(videoRef, (snapshot) => {
         const frameData = snapshot.val();
@@ -158,6 +159,11 @@
           window.audioContextReceiver = new AudioContext();
           window.audioBufferQueue = [];
           window.isPlaying = false;
+
+          // 🔇 Setup GainNode to control mute/unmute
+          window.audioGainNode = window.audioContextReceiver.createGain();
+          window.audioGainNode.gain.value = 0; // muted by default
+          window.audioGainNode.connect(window.audioContextReceiver.destination);
         }
 
         const audioContext = window.audioContextReceiver;
@@ -166,7 +172,7 @@
         const pcm16 = bytes;
         const float32 = new Float32Array(pcm16.length / 2);
         for (let i = 0; i < float32.length; i++) {
-          const val = (pcm16[i*2] | (pcm16[i*2 + 1] << 8));
+          const val = (pcm16[i * 2] | (pcm16[i * 2 + 1] << 8));
           float32[i] = val < 0x8000 ? val / 0x8000 : (val - 0x10000) / 0x8000;
         }
 
@@ -188,7 +194,7 @@
           const buffer = window.audioBufferQueue.shift();
           const source = audioContext.createBufferSource();
           source.buffer = buffer;
-          source.connect(audioContext.destination);
+          source.connect(window.audioGainNode); // 👈 connect to GainNode
           source.start();
           source.onended = () => {
             playAudioBufferQueue();
@@ -196,13 +202,20 @@
         }
       });
 
-      // ✅ Resume AudioContext on user interaction (important for mobile)
+      // Resume AudioContext on user interaction
       document.body.addEventListener('click', () => {
         if (window.audioContextReceiver && window.audioContextReceiver.state === 'suspended') {
           window.audioContextReceiver.resume();
         }
       });
     }
+
+    // 🔊 Unmute button logic
+    document.getElementById('unmuteBtn').onclick = () => {
+      if (window.audioGainNode) {
+        window.audioGainNode.gain.value = 1;
+      }
+    };
 
     function openFullscreen() {
       const elem = document.getElementById('liveStreamView');
