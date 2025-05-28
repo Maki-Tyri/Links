@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Login - Firebase Username Chat</title>
+<style>
+  body {
+    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    background: #f0f2f5;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+  }
+  #login-container {
+    background: white;
+    padding: 2rem;
+    border-radius: 12px;
+    box-shadow: 0 3px 8px rgba(0,0,0,0.15);
+    width: 320px;
+  }
+  #login-container h2 {
+    margin-bottom: 1rem;
+    text-align: center;
+    color: #333;
+  }
+  #login-container input {
+    width: 100%;
+    padding: 0.75rem;
+    margin-bottom: 1rem;
+    border-radius: 8px;
+    border: 1px solid #ccc;
+    font-size: 1rem;
+  }
+  #login-container button {
+    width: 100%;
+    padding: 0.75rem;
+    background: #007bff;
+    color: white;
+    font-weight: 600;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: background 0.3s ease;
+  }
+  #login-container button:hover {
+    background: #0056b3;
+  }
+  #switch-mode {
+    margin-top: 1rem;
+    text-align: center;
+    cursor: pointer;
+    color: #007bff;
+    user-select: none;
+  }
+</style>
+</head>
+<body>
+
+  <div id="login-container">
+    <h2 id="form-title">Login</h2>
+    <input type="text" id="username" placeholder="Username (e.g. johndoe)" />
+    <input type="password" id="password" placeholder="Password" />
+    <button id="submit-btn">Login</button>
+    <div id="switch-mode">Don't have an account? Register</div>
+  </div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+import {
+  getAuth,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword
+} from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
+import {
+  getFirestore,
+  collection,
+  query,
+  where,
+  getDocs,
+  setDoc,
+  doc
+} from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCy9CKJ6CELheBhw7Gs0BgsE1E0FsoYdgU",
+  authDomain: "project-955237504610034331.firebaseapp.com",
+  projectId: "project-955237504610034331",
+  storageBucket: "project-955237504610034331.appspot.com",
+  messagingSenderId: "76212939677",
+  appId: "1:76212939677:web:ef498bc1e4e480ab6e5d74",
+  measurementId: "G-WXBEP1LXTX"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+const formTitle = document.getElementById('form-title');
+const usernameInput = document.getElementById('username');
+const passwordInput = document.getElementById('password');
+const submitBtn = document.getElementById('submit-btn');
+const switchModeDiv = document.getElementById('switch-mode');
+
+let isLoginMode = true;
+
+// Convert username to fake email
+function usernameToEmail(username) {
+  return username.trim().toLowerCase() + "@chatapp.fake";
+}
+
+// Check if username exists in Firestore
+async function isUsernameTaken(username) {
+  const usersRef = collection(db, 'users');
+  const q = query(usersRef, where('username', '==', username.toLowerCase()));
+  const querySnapshot = await getDocs(q);
+  return !querySnapshot.empty;
+}
+
+async function register(username, password) {
+  if (!username || !password) {
+    alert('Please enter username and password');
+    return;
+  }
+  if (await isUsernameTaken(username)) {
+    alert('Username already taken');
+    return;
+  }
+  const email = usernameToEmail(username);
+  try {
+    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    await setDoc(doc(db, 'users', userCredential.user.uid), {
+      username: username.toLowerCase()
+    });
+    alert('Registration successful. You are now logged in.');
+    redirectToChat();
+  } catch (error) {
+    alert("Registration error: " + error.message);
+  }
+}
+
+async function login(username, password) {
+  if (!username || !password) {
+    alert('Please enter username and password');
+    return;
+  }
+  const email = usernameToEmail(username);
+  try {
+    await signInWithEmailAndPassword(auth, email, password);
+    redirectToChat();
+  } catch (error) {
+    alert("Login error: " + error.message);
+  }
+}
+
+function redirectToChat() {
+  // Simple redirect to chat.html after login/register
+  window.location.href = "chat.html";
+}
+
+submitBtn.onclick = () => {
+  const username = usernameInput.value.trim();
+  const password = passwordInput.value.trim();
+  if (isLoginMode) {
+    login(username, password);
+  } else {
+    register(username, password);
+  }
+};
+
+switchModeDiv.onclick = () => {
+  isLoginMode = !isLoginMode;
+  formTitle.textContent = isLoginMode ? "Login" : "Register";
+  submitBtn.textContent = isLoginMode ? "Login" : "Register";
+  switchModeDiv.textContent = isLoginMode
+    ? "Don't have an account? Register"
+    : "Already have an account? Login";
+};
+</script>
+
+</body>
+</html>
