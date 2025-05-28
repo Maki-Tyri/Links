@@ -2,21 +2,19 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Live Stream w/ Remote Control</title>
+  <title>Firebase Realtime DB Live Stream Video + Audio with Fullscreen</title>
   <style>
     body {
       font-family: Arial, sans-serif;
       background: #111;
       color: white;
       text-align: center;
-      margin: 0;
-      padding: 20px;
+      margin: 0; padding: 20px;
     }
 
     #liveStreamView {
       position: fixed;
-      top: 0;
-      left: 0;
+      top: 0; left: 0;
       width: 100vw;
       height: 100vh;
       object-fit: contain;
@@ -36,12 +34,11 @@
       border: none;
       color: white;
       padding: 10px 15px;
-      margin: 5px;
+      margin: 0 5px;
       cursor: pointer;
       font-size: 16px;
       border-radius: 5px;
     }
-
     button:hover {
       background: #555;
     }
@@ -53,15 +50,13 @@
   </style>
 </head>
 <body>
-  <h1>Firebase Realtime Live Stream with Fullscreen & Remote Control</h1>
+  <h1>Firebase Realtime DB Live Stream (Video + Audio) with Fullscreen</h1>
 
   <div id="controls">
     <button id="startStreamBtn">Start Streaming (Sender)</button>
     <button id="startReceiveBtn">Start Receiving (Viewer)</button>
     <button id="fullscreenBtn">Full Screen View</button>
-    <!-- Remote control test buttons -->
-    <button onclick="set(ref(db, 'liveStream/control/start'), true)">Remote ON</button>
-    <button onclick="set(ref(db, 'liveStream/control/start'), false)">Remote OFF</button>
+    <button id="remoteStartBtn">Remote Start Stream</button>
   </div>
 
   <img id="liveStreamView" alt="Live Stream Here" />
@@ -89,84 +84,73 @@
     const audioRef = ref(db, 'liveStream/audioChunk');
     const controlRef = ref(db, 'liveStream/control/start');
 
-    let streamInterval;
-    let processor;
-
-    function startStreaming(force = false) {
-      if (!force) {
-        onValue(controlRef, (snapshot) => {
-          const shouldStart = snapshot.val();
-          if (shouldStart) runStream();
-          else stopStream();
-        });
-      } else {
-        runStream();
-      }
-
-      async function runStream() {
-        const video = document.createElement('video');
-        video.autoplay = true;
-        video.muted = true; // Auto-mute sender
-        video.style.display = "none";
-
-        let stream;
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-          video.srcObject = stream;
-        } catch (err) {
-          alert("Error accessing camera/mic: " + err.message);
-          return;
+    // STREAMING SENDER (wait for control signal)
+    function listenForStreamTrigger() {
+      onValue(controlRef, (snapshot) => {
+        const shouldStart = snapshot.val();
+        if (shouldStart) {
+          startStreaming();
         }
+      });
+    }
 
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
+    async function startStreaming() {
+      // Prevent duplicate streaming
+      if (window.streaming) return;
+      window.streaming = true;
 
-        const audioContext = new AudioContext();
-        const source = audioContext.createMediaStreamSource(stream);
-        processor = audioContext.createScriptProcessor(4096, 1, 1);
+      const video = document.createElement('video');
+      video.autoplay = true;
+      video.muted = true; // Auto mute sender
 
-        processor.onaudioprocess = (e) => {
-          const inputData = e.inputBuffer.getChannelData(0);
-          const buffer = new ArrayBuffer(inputData.length * 2);
-          const view = new DataView(buffer);
-          for (let i = 0; i < inputData.length; i++) {
-            let s = Math.max(-1, Math.min(1, inputData[i]));
-            s = s < 0 ? s * 0x8000 : s * 0x7FFF;
-            view.setInt16(i * 2, s, true);
-          }
-          const base64Audio = btoa(String.fromCharCode(...new Uint8Array(buffer)));
-          set(audioRef, base64Audio);
-        };
-
-        source.connect(processor);
-        processor.connect(audioContext.destination);
-
-        video.addEventListener('loadedmetadata', () => {
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
-
-          streamInterval = setInterval(() => {
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            const frameData = canvas.toDataURL('image/jpeg', 0.5);
-            set(videoRef, frameData);
-          }, 100);
-
-          document.getElementById('liveStreamView').style.display = 'block';
-        });
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        video.srcObject = stream;
+      } catch (err) {
+        alert("Error accessing camera/mic: " + err.message);
+        return;
       }
 
-      function stopStream() {
-        clearInterval(streamInterval);
-        if (processor) processor.disconnect();
-        set(videoRef, null);
-        set(audioRef, null);
-        document.getElementById('liveStreamView').style.display = 'none';
-      }
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+
+      const audioContext = new AudioContext();
+      const source = audioContext.createMediaStreamSource(stream);
+      const processor = audioContext.createScriptProcessor(4096, 1, 1);
+
+      processor.onaudioprocess = (e) => {
+        const inputData = e.inputBuffer.getChannelData(0);
+        const buffer = new ArrayBuffer(inputData.length * 2);
+        const view = new DataView(buffer);
+        for (let i = 0; i < inputData.length; i++) {
+          let s = Math.max(-1, Math.min(1, inputData[i]));
+          s = s < 0 ? s * 0x8000 : s * 0x7FFF;
+          view.setInt16(i * 2, s, true);
+        }
+        const base64Audio = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+        set(audioRef, base64Audio);
+      };
+
+      source.connect(processor);
+      processor.connect(audioContext.destination);
+
+      video.addEventListener('loadedmetadata', () => {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+
+        setInterval(() => {
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const frameData = canvas.toDataURL('image/jpeg', 0.5);
+          set(videoRef, frameData);
+        }, 100);
+      });
+
+      document.getElementById('liveStreamView').style.display = 'block';
     }
 
     function startReceiving() {
       const img = document.getElementById('liveStreamView');
-      const audio = document.getElementById('liveAudio');
       img.style.display = 'block';
 
       onValue(videoRef, (snapshot) => {
@@ -197,7 +181,7 @@
         const pcm16 = bytes;
         const float32 = new Float32Array(pcm16.length / 2);
         for (let i = 0; i < float32.length; i++) {
-          const val = (pcm16[i * 2] | (pcm16[i * 2 + 1] << 8));
+          const val = (pcm16[i*2] | (pcm16[i*2 + 1] << 8));
           float32[i] = val < 0x8000 ? val / 0x8000 : (val - 0x10000) / 0x8000;
         }
 
@@ -205,7 +189,10 @@
         audioBuffer.getChannelData(0).set(float32);
 
         window.audioBufferQueue.push(audioBuffer);
-        if (!window.isPlaying) playAudioBufferQueue();
+
+        if (!window.isPlaying) {
+          playAudioBufferQueue();
+        }
 
         function playAudioBufferQueue() {
           if (window.audioBufferQueue.length === 0) {
@@ -218,8 +205,7 @@
           source.buffer = buffer;
           source.connect(audioContext.destination);
           source.start();
-
-          source.onended = playAudioBufferQueue;
+          source.onended = () => playAudioBufferQueue();
         }
       });
     }
@@ -235,9 +221,15 @@
       }
     }
 
-    document.getElementById('startStreamBtn').onclick = () => startStreaming(false);
+    // Remote trigger to start the sender's stream
+    function remoteStart() {
+      set(controlRef, true);
+    }
+
+    document.getElementById('startStreamBtn').onclick = listenForStreamTrigger;
     document.getElementById('startReceiveBtn').onclick = startReceiving;
     document.getElementById('fullscreenBtn').onclick = openFullscreen;
+    document.getElementById('remoteStartBtn').onclick = remoteStart;
   </script>
 </body>
 </html>
