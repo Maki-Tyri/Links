@@ -41,11 +41,6 @@
     button:hover {
       background: #555;
     }
-
-    audio {
-      margin-top: 10px;
-      width: 320px;
-    }
   </style>
 </head>
 <body>
@@ -54,12 +49,10 @@
     <button id="startStreamBtn">Start Streaming (Sender)</button>
     <button id="startReceiveBtn">Start Receiving (Viewer)</button>
     <button id="fullscreenBtn">Full Screen View</button>
-    <button id="unmuteBtn" style="display:none;">Unmute Audio</button>
+    <button id="muteToggleBtn" style="display:none;">Mute</button>
   </div>
 
   <img id="liveStreamView" alt="Live Stream Here" />
-  <!-- no need for muted audio tag, we're using GainNode now -->
-  <audio id="liveAudio" controls autoplay style="display:none;"></audio>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.3.0/firebase-app.js";
@@ -135,7 +128,7 @@
     function startReceiving() {
       const img = document.getElementById('liveStreamView');
       img.style.display = 'block';
-      document.getElementById('unmuteBtn').style.display = 'inline-block';
+      document.getElementById('muteToggleBtn').style.display = 'inline-block';
 
       onValue(videoRef, (snapshot) => {
         const frameData = snapshot.val();
@@ -160,9 +153,8 @@
           window.audioBufferQueue = [];
           window.isPlaying = false;
 
-          // 🔇 Setup GainNode to control mute/unmute
           window.audioGainNode = window.audioContextReceiver.createGain();
-          window.audioGainNode.gain.value = 0; // muted by default
+          window.audioGainNode.gain.value = 1; // default: unmuted
           window.audioGainNode.connect(window.audioContextReceiver.destination);
         }
 
@@ -194,26 +186,25 @@
           const buffer = window.audioBufferQueue.shift();
           const source = audioContext.createBufferSource();
           source.buffer = buffer;
-          source.connect(window.audioGainNode); // 👈 connect to GainNode
+          source.connect(window.audioGainNode);
           source.start();
           source.onended = () => {
             playAudioBufferQueue();
           };
         }
       });
-
-      // Resume AudioContext on user interaction
-      document.body.addEventListener('click', () => {
-        if (window.audioContextReceiver && window.audioContextReceiver.state === 'suspended') {
-          window.audioContextReceiver.resume();
-        }
-      });
     }
 
-    // 🔊 Unmute button logic
-    document.getElementById('unmuteBtn').onclick = () => {
+    // Mute/Unmute toggle
+    document.getElementById('muteToggleBtn').onclick = () => {
       if (window.audioGainNode) {
-        window.audioGainNode.gain.value = 1;
+        if (window.audioGainNode.gain.value === 1) {
+          window.audioGainNode.gain.value = 0;
+          document.getElementById('muteToggleBtn').textContent = 'Unmute';
+        } else {
+          window.audioGainNode.gain.value = 1;
+          document.getElementById('muteToggleBtn').textContent = 'Mute';
+        }
       }
     };
 
