@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Chat - Firebase Username Chat</title>
+<style>
+  /* Same styles as before but adjusted for standalone */
+  body {
+    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    margin: 0; height: 100vh;
+    display: flex; flex-direction: column;
+    background: #fff;
+  }
+
+  #chat-heads-container {
+    background: #ededed;
+    padding: 0.5rem;
+    display: flex;
+    gap: 0.5rem;
+    overflow-x: auto;
+    border-bottom: 1px solid #ccc;
+  }
+  .chat-head {
+    flex: 0 0 auto;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: #007bff;
+    color: white;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    user-select: none;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+  }
+  .chat-head.active {
+    box-shadow: 0 0 10px 3px #007bffaa;
+  }
+
+  #chat-window {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+  #messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem;
+    background: #f9f9f9;
+  }
+  .message {
+    margin-bottom: 1rem;
+    max-width: 70%;
+    padding: 0.5rem 0.75rem;
+    border-radius: 12px;
+    word-wrap: break-word;
+    font-size: 0.95rem;
+  }
+  .message.self {
+    background: #dcf8c6;
+    align-self: flex-end;
+  }
+  .message.other {
+    background: #fff;
+    border: 1px solid #ddd;
+    align-self: flex-start;
+  }
+  #input-area {
+    display: flex;
+    padding: 0.5rem;
+    border-top: 1px solid #ccc;
+    gap: 0.5rem;
+  }
+  #chat-input {
+    flex: 1;
+    padding: 0.75rem;
+    border-radius: 20px;
+    border: 1px solid #ccc;
+    font-size: 1rem;
+  }
+  #media-input {
+    display: none;
+  }
+  #media-label {
+    background: #007bff;
+    color: white;
+    padding: 0 1rem;
+    border-radius: 20px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    font-size: 1.2rem;
+  }
+  #send-btn {
+    background: #007bff;
+    color: white;
+    border: none;
+    padding: 0 1rem;
+    border-radius: 20px;
+    cursor: pointer;
+    font-weight: 600;
+  }
+
+  #logout-btn {
+    background: #dc3545;
+    color: white;
+    border: none;
+    padding: 0.4rem 1rem;
+    border-radius: 20px;
+    cursor: pointer;
+    margin: 0.5rem;
+    align-self: flex-end;
+  }
+</style>
+</head>
+<body>
+
+  <button id="logout-btn">Logout</button>
+
+  <div id="chat-heads-container"></div>
+
+  <div id="chat-window">
+    <div id="messages"></div>
+    <div id="input-area">
+      <input type="text" id="chat-input" placeholder="Type a message or paste a link" autocomplete="off" />
+      <label id="media-label" for="media-input" title="Attach photo, audio, video">📎</label>
+      <input type="file" id="media-input" accept="image/*,video/*,audio/*" />
+      <button id="send-btn">Send</button>
+    </div>
+  </div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+import {
+  getAuth,
+  onAuthStateChanged,
+  signOut
+} from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
+import {
+  getFirestore,
+  collection,
+  query,
+  orderBy,
+  onSnapshot,
+  serverTimestamp,
+  addDoc,
+  doc,
+  getDoc
+} from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+import {
+  getStorage,
+  ref,
+  uploadBytes,
+  getDownloadURL
+} from "https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCy9CKJ6CELheBhw7Gs0BgsE1E0FsoYdgU",
+  authDomain: "project-955237504610034331.firebaseapp.com",
+  projectId: "project-955237504610034331",
+  storageBucket: "project-955237504610034331.appspot.com",
+  messagingSenderId: "76212939677",
+  appId: "1:76212939677:web:ef498bc1e4e480ab6e5d74",
+  measurementId: "G-WXBEP1LXTX"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const storage = getStorage(app);
+
+const chatHeadsContainer = document.getElementById('chat-heads-container');
+const messagesDiv = document.getElementById('messages');
+const chatInput = document.getElementById('chat-input');
+const mediaInput = document.getElementById('media-input');
+const sendBtn = document.getElementById('send-btn');
+const logoutBtn = document.getElementById('logout-btn');
+
+let currentUser = null;
+let unsubscribeMessages = null;
+let activeChatUser = null;
+
+function isValidHttpUrl(string) {
+  let url;
+  try {
+    url = new URL(string);
+  } catch (_) {
+    return false;
+  }
+  return url.protocol === "http:" || url.protocol === "https:";
+}
+
+// Check auth state on page load
+onAuthStateChanged(auth, async user => {
+  if (!user) {
+    // Not logged in, redirect to login page
+    window.location.href = "login.html";
+  } else {
+    currentUser = user;
+    loadChatHeads();
+  }
+});
+
+async function loadChatHeads() {
+  chatHeadsContainer.innerHTML = '';
+  // For now, just show current user as single chat head (self-chat)
+  const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+  if (!userDoc.exists()) return;
+
+  const userData = userDoc.data();
+  const chatHead = document.createElement('div');
+  chatHead.classList.add('chat-head', 'active');
+  chatHead.textContent = userData.username.charAt(0).toUpperCase();
+  chatHead.title = userData.username;
+  chatHead.onclick = () => {
+    openChatWith(userData);
+  };
+  chatHeadsContainer.appendChild(chatHead);
+  openChatWith(userData);
+}
+
+function openChatWith(userData) {
+  activeChatUser = userData;
+  messagesDiv.innerHTML = '';
+  if (unsubscribeMessages) unsubscribeMessages();
+
+  const messagesRef = collection(db, 'messages');
+  const q = query(messagesRef, orderBy('timestamp', 'asc'));
+  unsubscribeMessages = onSnapshot(q, (snapshot) => {
+    messagesDiv.innerHTML = '';
+    snapshot.forEach(docSnap => {
+      const m = docSnap.data();
+      // Show messages where sender or receiver is current user or active chat user
+      if (
+        (m.senderId === currentUser.uid && m.receiverUsername === activeChatUser.username) ||
+        (m.senderId !== currentUser.uid && m.senderUsername === activeChatUser.username)
+      ) {
+        const div = document.createElement('div');
+        div.classList.add('message');
+        div.classList.add(m.senderId === currentUser.uid ? 'self' : 'other');
+
+        if (m.text) {
+          if (isValidHttpUrl(m.text)) {
+            const a = document.createElement('a');
+            a.href = m.text;
+            a.target = '_blank';
+            a.rel = 'noopener noreferrer';
+            a.textContent = m.text;
+            div.appendChild(a);
+          } else {
+            div.textContent = m.text;
+          }
+        }
+
+        if (m.mediaUrl) {
+          if (m.mediaType === 'photo') {
+            const img = document.createElement('img');
+            img.src = m.mediaUrl;
+            img.style.maxWidth = '200px';
+            img.style.borderRadius = '12px';
+            div.appendChild(img);
+          } else if (m.mediaType === 'video') {
+            const video = document.createElement('video');
+            video.src = m.mediaUrl;
+            video.controls = true;
+            video.style.maxWidth = '200px';
+            div.appendChild(video);
+          } else if (m.mediaType === 'audio') {
+            const audio = document.createElement('audio');
+            audio.src = m.mediaUrl;
+            audio.controls = true;
+            div.appendChild(audio);
+          }
+        }
+
+        messagesDiv.appendChild(div);
+      }
+    });
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+  });
+}
+
+sendBtn.onclick = async () => {
+  const text = chatInput.value.trim();
+  const file = mediaInput.files[0] || null;
+
+  if (!text && !file) {
+    alert('Enter message or select a file');
+    return;
+  }
+
+  sendBtn.disabled = true;
+
+  try {
+    await sendMessage(text, file);
+    chatInput.value = '';
+    mediaInput.value = null;
+  } catch (error) {
+    alert('Error sending message: ' + error.message);
+  } finally {
+    sendBtn.disabled = false;
+  }
+};
+
+async function sendMessage(text, file) {
+  let mediaUrl = null;
+  let mediaType = null;
+
+  if (file) {
+    const fileRef = ref(storage, 'chatMedia/' + Date.now() + '-' + file.name);
+    await uploadBytes(fileRef, file);
+    mediaUrl = await getDownloadURL(fileRef);
+
+    if (file.type.startsWith('image/')) mediaType = 'photo';
+    else if (file.type.startsWith('video/')) mediaType = 'video';
+    else if (file.type.startsWith('audio/')) mediaType = 'audio';
+  }
+
+  await addDoc(collection(db, 'messages'), {
+    senderId: currentUser.uid,
+    senderUsername: activeChatUser.username,
+    receiverUsername: activeChatUser.username,
+    text: text || null,
+    mediaUrl,
+    mediaType,
+    timestamp: serverTimestamp()
+  });
+}
+
+logoutBtn.onclick = async () => {
+  await signOut(auth);
+  window.location.href = "login.html";
+};
+</script>
+
+</body>
+</html>
