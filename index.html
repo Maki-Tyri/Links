@@ -117,7 +117,8 @@
       };
 
       source.connect(processor);
-      processor.connect(audioContext.destination);
+      // Do NOT connect processor to destination to avoid sender hearing themselves
+      // processor.connect(audioContext.destination);
 
       video.addEventListener('loadedmetadata', () => {
         canvas.width = video.videoWidth;
