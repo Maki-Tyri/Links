@@ -3,38 +3,47 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>WebRTC Firebase Signaling Demo</title>
+<title>Simple Fullscreen WebRTC + Firebase Signaling</title>
 <style>
-  video { width: 45%; margin: 1%; background: black; }
+  body, html {
+    margin: 0; padding: 0; height: 100%; background: black; display: flex; justify-content: center; align-items: center;
+    overflow: hidden;
+  }
+  video {
+    width: 100vw; height: 100vh; object-fit: cover; background: black;
+  }
+  #controls {
+    position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
+    z-index: 10; display: flex; gap: 10px;
+  }
+  input, button {
+    font-size: 1.2rem; padding: 0.4rem 0.8rem;
+  }
 </style>
 </head>
 <body>
 
-<h2>WebRTC + Firebase Realtime Database Signaling</h2>
-
-<label>Room ID: <input id="roomIdInput" placeholder="Enter room ID" /></label>
-<button id="createBtn">Create Room (Send)</button>
-<button id="joinBtn">Join Room (Receive)</button>
-<button id="hangupBtn">Hang Up</button>
-
-<div>
-  <video id="localVideo" autoplay muted playsinline></video>
-  <video id="remoteVideo" autoplay playsinline></video>
+<div id="controls">
+  <input id="roomIdInput" placeholder="Room ID" autocomplete="off" />
+  <button id="createBtn">Send</button>
+  <button id="joinBtn">Receive</button>
+  <button id="hangupBtn">Hang Up</button>
 </div>
+
+<video id="video" autoplay playsinline muted></video>
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
   import {
     getDatabase,
     ref,
-    onValue,
     set,
+    onValue,
     push,
     remove,
-    update,
   } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
 
-  // Your Firebase config here (replace with your own!)
+  // Firebase config - replace with your own
   const firebaseConfig = {
     apiKey: "AIzaSyCy9CKJ6CELheBhw7Gs0BgsE1E0FsoYdgU",
     authDomain: "project-955237504610034331.firebaseapp.com",
@@ -45,170 +54,142 @@
     appId: "1:76212939677:web:ef498bc1e4e480ab6e5d74",
   };
 
-  // Initialize Firebase
   const app = initializeApp(firebaseConfig);
   const db = getDatabase(app);
 
-  // HTML elements
+  const videoElem = document.getElementById("video");
   const roomIdInput = document.getElementById("roomIdInput");
   const createBtn = document.getElementById("createBtn");
   const joinBtn = document.getElementById("joinBtn");
   const hangupBtn = document.getElementById("hangupBtn");
-  const localVideo = document.getElementById("localVideo");
-  const remoteVideo = document.getElementById("remoteVideo");
 
-  let pc = null;
-  let localStream = null;
-  let roomRef = null;
-  let roomId = null;
+  let pc;
+  let localStream;
+  let roomRef;
+  let roomId;
 
-  // STUN servers config
   const servers = {
     iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
-    iceCandidatePoolSize: 10,
   };
 
-  // Get local media stream
   async function startLocalStream() {
-    localStream = await navigator.mediaDevices.getUserMedia({
-      video: true,
-      audio: true,
-    });
-    localVideo.srcObject = localStream;
+    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
   }
 
-  // Create RTCPeerConnection and add tracks
   function createPeerConnection() {
     pc = new RTCPeerConnection(servers);
 
-    // Push any ICE candidates to DB
+    // Send ICE candidates to DB
     pc.onicecandidate = (event) => {
-      if (event.candidate) {
-        const json = event.candidate.toJSON();
-        const candidateRef = push(ref(roomRef, "candidates"));
-        candidateRef.set(json);
-      }
+      if (!event.candidate) return;
+      const candidateData = event.candidate.toJSON();
+      push(ref(roomRef, "candidates")).then((c) => c.set(candidateData));
     };
 
     // When remote stream arrives, show it
     pc.ontrack = (event) => {
-      if (remoteVideo.srcObject !== event.streams[0]) {
-        remoteVideo.srcObject = event.streams[0];
-      }
+      videoElem.srcObject = event.streams[0];
     };
 
-    // Add local tracks to connection
-    localStream.getTracks().forEach((track) => {
-      pc.addTrack(track, localStream);
-    });
+    // Add local tracks to pc
+    localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
   }
 
-  // Create a room (sender)
   async function createRoom() {
+    roomId = roomIdInput.value.trim();
+    if (!roomId) {
+      alert("Enter a room ID");
+      return;
+    }
     await startLocalStream();
     createPeerConnection();
 
-    roomId = roomIdInput.value;
-    if (!roomId) {
-      alert("Please enter a room ID!");
-      return;
-    }
-
     roomRef = ref(db, "rooms/" + roomId);
-    await set(roomRef, {}); // create empty room in DB
+    await set(roomRef, {}); // create room empty
 
     pc.onnegotiationneeded = async () => {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-
-      // Save offer to DB
-      await update(roomRef, { offer: JSON.stringify(pc.localDescription) });
+      await set(roomRef, { offer: JSON.stringify(pc.localDescription) });
     };
 
     // Listen for answer
     onValue(ref(roomRef, "answer"), async (snapshot) => {
-      const answer = snapshot.val();
-      if (!answer) return;
-      const answerDesc = new RTCSessionDescription(JSON.parse(answer));
+      const ans = snapshot.val();
+      if (!ans) return;
+      const answerDesc = new RTCSessionDescription(JSON.parse(ans));
       await pc.setRemoteDescription(answerDesc);
     });
 
-    // Listen for ICE candidates from remote
-    onValue(ref(roomRef, "candidates"), (snapshot) => {
+    // Listen for ICE candidates
+    onValue(ref(roomRef, "candidates"), async (snapshot) => {
       const candidates = snapshot.val();
       if (!candidates) return;
-      Object.values(candidates).forEach(async (candidate) => {
+      for (const key in candidates) {
         try {
-          await pc.addIceCandidate(new RTCIceCandidate(candidate));
+          await pc.addIceCandidate(new RTCIceCandidate(candidates[key]));
         } catch (e) {
-          console.error("Error adding remote ICE candidate:", e);
+          console.warn("ICE candidate add error:", e);
         }
-      });
+      }
     });
+
+    videoElem.srcObject = localStream;
+    videoElem.muted = true;
   }
 
-  // Join a room (receiver)
   async function joinRoom() {
-    await startLocalStream();
-    createPeerConnection();
-
-    roomId = roomIdInput.value;
+    roomId = roomIdInput.value.trim();
     if (!roomId) {
-      alert("Please enter a room ID!");
+      alert("Enter a room ID");
       return;
     }
+    await startLocalStream();
+    createPeerConnection();
 
     roomRef = ref(db, "rooms/" + roomId);
 
     // Listen for offer
     onValue(ref(roomRef, "offer"), async (snapshot) => {
-      const offer = snapshot.val();
-      if (!offer) return;
+      const off = snapshot.val();
+      if (!off) return;
 
-      const offerDesc = new RTCSessionDescription(JSON.parse(offer));
+      const offerDesc = new RTCSessionDescription(JSON.parse(off));
       await pc.setRemoteDescription(offerDesc);
 
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
 
-      // Save answer to DB
-      await update(roomRef, { answer: JSON.stringify(pc.localDescription) });
+      await set(ref(roomRef, "answer"), JSON.stringify(pc.localDescription));
     });
 
-    // Listen for ICE candidates from remote
-    onValue(ref(roomRef, "candidates"), (snapshot) => {
+    // Listen for ICE candidates
+    onValue(ref(roomRef, "candidates"), async (snapshot) => {
       const candidates = snapshot.val();
       if (!candidates) return;
-      Object.values(candidates).forEach(async (candidate) => {
+      for (const key in candidates) {
         try {
-          await pc.addIceCandidate(new RTCIceCandidate(candidate));
+          await pc.addIceCandidate(new RTCIceCandidate(candidates[key]));
         } catch (e) {
-          console.error("Error adding remote ICE candidate:", e);
+          console.warn("ICE candidate add error:", e);
         }
-      });
+      }
     });
+
+    videoElem.srcObject = localStream;
+    videoElem.muted = true;
   }
 
-  // Hang up and cleanup
   async function hangUp() {
-    if (pc) {
-      pc.close();
-    }
-    if (localStream) {
-      localStream.getTracks().forEach((track) => track.stop());
-    }
-    if (roomRef) {
-      await remove(roomRef);
-    }
-    localVideo.srcObject = null;
-    remoteVideo.srcObject = null;
+    if (pc) pc.close();
+    if (localStream) localStream.getTracks().forEach((t) => t.stop());
+    if (roomRef) await remove(roomRef);
+    videoElem.srcObject = null;
   }
 
-  // Button listeners
   createBtn.onclick = createRoom;
   joinBtn.onclick = joinRoom;
   hangupBtn.onclick = hangUp;
-
 </script>
 
 </body>
