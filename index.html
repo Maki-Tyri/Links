@@ -2,97 +2,443 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Auto Play Login with Auto-Close Popups</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Smart Link Manager</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap"
+    rel="stylesheet"
+  />
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      background-color: #e0e0e0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding-top: 100px;
-    }
-    .login-box {
-      background: white;
-      padding: 30px;
-      border-radius: 10px;
-      box-shadow: 0 0 10px #aaa;
-      text-align: center;
-      width: 280px;
-    }
-    input {
-      padding: 10px;
-      margin: 5px 0;
-      width: 100%;
+    /* Your original CSS here (unchanged) */
+    * {
       box-sizing: border-box;
+      font-family: "Inter", sans-serif;
+    }
+    body {
+      margin: 0;
+      padding: 20px;
+      background: linear-gradient(to right, #e3f2fd, #fce4ec);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+    }
+    #container {
+      background: white;
+      max-width: 450px;
+      width: 100%;
+      border-radius: 12px;
+      padding: 30px 35px;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
+    }
+    h2,
+    h3 {
+      text-align: center;
+      color: #1565c0;
+      margin-bottom: 20px;
+    }
+    h2 span {
+      color: #2e7d32;
+    }
+    input[type="text"],
+    input[type="password"],
+    input[type="url"],
+    input[type="email"] {
+      width: 100%;
+      padding: 12px 14px;
+      margin-bottom: 14px;
+      border: 1.5px solid #ccc;
+      border-radius: 8px;
+      font-size: 1rem;
+      transition: border-color 0.2s ease;
+    }
+    input:focus {
+      outline: none;
+      border-color: #1565c0;
+      box-shadow: 0 0 5px rgba(21, 101, 192, 0.4);
     }
     button {
-      padding: 10px 20px;
-      margin-top: 10px;
+      background-color: #1565c0;
+      color: white;
+      border: none;
+      padding: 12px;
       width: 100%;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+    }
+    button:hover:not(:disabled) {
+      background-color: #0d47a1;
+    }
+    button:disabled {
+      background-color: #90caf9;
+      cursor: not-allowed;
+    }
+    #registerBtn {
+      background-color: #43a047;
+      margin-top: 10px;
+    }
+    #registerBtn:hover {
+      background-color: #2e7d32;
+    }
+    #logoutBtn {
+      background-color: #757575;
+      margin-bottom: 20px;
+    }
+    #logoutBtn:hover {
+      background-color: #424242;
+    }
+    .message {
+      margin-top: 8px;
+      text-align: center;
+      font-weight: 600;
+    }
+    .message.error {
+      color: #e53935;
+    }
+    .message.success {
+      color: #43a047;
+    }
+    #linksList {
+      list-style: none;
+      padding-left: 0;
+      margin-top: 20px;
+      max-height: 300px;
+      overflow-y: auto;
+      border-top: 1px solid #ddd;
+    }
+    #linksList li {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 0;
+      border-bottom: 1px solid #eee;
+      animation: fadeIn 0.3s ease-in-out;
+    }
+    #linksList li a {
+      color: #1565c0;
+      text-decoration: none;
+      font-weight: 600;
+      flex-grow: 1;
+      margin-right: 10px;
+    }
+    #linksList li a:hover {
+      text-decoration: underline;
+    }
+    #linksList li button {
+      background-color: #ef5350;
+      padding: 6px 10px;
+      font-size: 0.9rem;
+      border-radius: 6px;
+      transition: background-color 0.2s ease;
+      border: none;
       cursor: pointer;
     }
-    p#message {
-      color: red;
-      margin-top: 10px;
-      height: 20px;
+    #linksList li button:hover {
+      background-color: #c62828;
+    }
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    @media (max-width: 480px) {
+      body {
+        padding: 10px;
+      }
+      #container {
+        padding: 20px;
+      }
     }
   </style>
 </head>
 <body>
+  <div id="container">
+    <div id="loginDiv">
+      <h2>
+        Welcome to <span>LinkVault</span>
+      </h2>
+      <input
+        type="email"
+        id="emailInput"
+        placeholder="Email"
+        autocomplete="username"
+      />
+      <input
+        type="password"
+        id="passwordInput"
+        placeholder="Password"
+        autocomplete="current-password"
+      />
+      <button id="loginBtn">Login</button>
+      <button id="registerBtn">Register</button>
+      <p id="loginMessage" class="message"></p>
+    </div>
 
-  <div class="login-box">
-    <h2>Login</h2>
-    <input type="text" id="username" placeholder="Username" autocomplete="off" />
-    <input type="password" id="password" placeholder="Password" autocomplete="off" />
-    <button onclick="login()">Login</button>
-    <p id="message"></p>
+    <div id="appDiv" style="display: none">
+      <h2>
+        Hello, <span id="userNameDisplay"></span>!
+      </h2>
+      <button id="logoutBtn">Logout</button>
+
+      <h3>Add a New Link</h3>
+      <input type="text" id="linkNameInput" placeholder="Link Name" />
+      <input
+        type="url"
+        id="linkURLInput"
+        placeholder="Link URL (https://...)"
+      />
+      <button id="addLinkBtn" disabled>Add Link</button>
+      <p id="addLinkMsg" class="message"></p>
+
+      <h3>Your Links</h3>
+      <ul id="linksList"></ul>
+    </div>
   </div>
 
-  <script>
-    // This function opens each link in a popup which loads player.html that loads the video and auto-closes after delay
-    function openLinksOneByOne(links, delay) {
-      let index = 0;
+  <script type="module">
+    // Import Firebase modules from CDN
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-app.js";
+    import {
+      getAuth,
+      onAuthStateChanged,
+      signInWithEmailAndPassword,
+      createUserWithEmailAndPassword,
+      signOut,
+    } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-auth.js";
+    import {
+      getDatabase,
+      ref,
+      push,
+      onValue,
+      remove,
+      set,
+      get,
+      child,
+    } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-database.js";
 
-      function openNext() {
-        if (index < links.length) {
-          // Open the intermediate player.html with the link and delay as query parameters
-          const playerUrl = `player.html?link=${encodeURIComponent(links[index])}&delay=${delay}`;
-          window.open(playerUrl, '_blank');
-          index++;
-          setTimeout(openNext, delay);
-        }
-      }
+    // TODO: Replace with your own Firebase project config
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_AUTH_DOMAIN",
+      databaseURL: "YOUR_DATABASE_URL",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_STORAGE_BUCKET",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId: "YOUR_APP_ID",
+    };
 
-      openNext();
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getDatabase(app);
+
+    // DOM elements
+    const loginDiv = document.getElementById("loginDiv");
+    const appDiv = document.getElementById("appDiv");
+
+    const emailInput = document.getElementById("emailInput");
+    const passwordInput = document.getElementById("passwordInput");
+    const loginBtn = document.getElementById("loginBtn");
+    const registerBtn = document.getElementById("registerBtn");
+    const loginMessage = document.getElementById("loginMessage");
+
+    const logoutBtn = document.getElementById("logoutBtn");
+    const userNameDisplay = document.getElementById("userNameDisplay");
+
+    const linkNameInput = document.getElementById("linkNameInput");
+    const linkURLInput = document.getElementById("linkURLInput");
+    const addLinkBtn = document.getElementById("addLinkBtn");
+    const addLinkMsg = document.getElementById("addLinkMsg");
+    const linksList = document.getElementById("linksList");
+
+    let currentUser = null;
+
+    // Enable addLinkBtn only when inputs are valid
+    function validateLinkInputs() {
+      const nameValid = linkNameInput.value.trim().length > 0;
+      const urlValid = linkURLInput.value.trim().startsWith("http");
+      addLinkBtn.disabled = !(nameValid && urlValid);
     }
 
-    function login() {
-      const user = document.getElementById('username').value.trim();
-      const pass = document.getElementById('password').value.trim();
-      const message = document.getElementById('message');
+    linkNameInput.addEventListener("input", validateLinkInputs);
+    linkURLInput.addEventListener("input", validateLinkInputs);
 
-      if (user === "Larael" && pass === "112624") {
-        message.textContent = "";
+    // Show messages
+    function showLoginMessage(msg, isError = false) {
+      loginMessage.textContent = msg;
+      loginMessage.className = "message " + (isError ? "error" : "success");
+    }
 
-        const links = [
-           https://www.capcut.com/s/CSDGmACIek4q9IY9/",
-          "https://www.capcut.com/s/CUWlBbHY43irH5M7/",
-          "https://www.capcut.com/s/CWHCsoq64YAsMKof/",
-	        "https://www.capcut.com/s/CaR-dTUgZz2BrUsd/",
-	        "https://www.capcut.com/s/CWoskQkYL0s9EtgB/",
-          "https://maki-tyri.github.io/Tyri-052526/",
-          "https://maki-tyri.github.io/PROPOSAL/"
-          // Add more links here if needed
-        ];
+    function showAddLinkMessage(msg, isError = false) {
+      addLinkMsg.textContent = msg;
+      addLinkMsg.className = "message " + (isError ? "error" : "success");
+      if (!isError) {
+        setTimeout(() => {
+          addLinkMsg.textContent = "";
+        }, 3000);
+      }
+    }
 
-        alert("Login successful! Opening videos in popups.");
-        openLinksOneByOne(links, 5000); // 5000 ms = 5 seconds delay per popup
+    // Register user
+    registerBtn.addEventListener("click", async () => {
+      const email = emailInput.value.trim();
+      const password = passwordInput.value;
+      if (!email || !password) {
+        showLoginMessage("Please enter email and password.", true);
+        return;
+      }
+      try {
+        await createUserWithEmailAndPassword(auth, email, password);
+        showLoginMessage("Registration successful! Logging in...");
+      } catch (error) {
+        showLoginMessage("Registration failed: " + error.message, true);
+      }
+    });
+
+    // Login user
+    loginBtn.addEventListener("click", async () => {
+      const email = emailInput.value.trim();
+      const password = passwordInput.value;
+      if (!email || !password) {
+        showLoginMessage("Please enter email and password.", true);
+        return;
+      }
+      try {
+        await signInWithEmailAndPassword(auth, email, password);
+        showLoginMessage("Login successful!");
+      } catch (error) {
+        showLoginMessage("Login failed: " + error.message, true);
+      }
+    });
+
+    // Logout user
+    logoutBtn.addEventListener("click", async () => {
+      try {
+        await signOut(auth);
+      } catch (error) {
+        alert("Logout failed: " + error.message);
+      }
+    });
+
+    // Listen for auth state changes
+    onAuthStateChanged(auth, (user) => {
+      currentUser = user;
+      if (user) {
+        // User is signed in
+        loginDiv.style.display = "none";
+        appDiv.style.display = "block";
+        userNameDisplay.textContent = user.email.split("@")[0];
+        loginMessage.textContent = "";
+
+        // Load user's links from DB
+        loadLinks();
       } else {
-        message.textContent = "Invalid username or password!";
+        // No user signed in
+        loginDiv.style.display = "block";
+        appDiv.style.display = "none";
+        userNameDisplay.textContent = "";
+        clearLinksList();
+        loginMessage.textContent = "";
+        addLinkMsg.textContent = "";
+        linkNameInput.value = "";
+        linkURLInput.value = "";
+        addLinkBtn.disabled = true;
+      }
+    });
+
+    // Load links from Firebase Realtime Database for current user
+    function loadLinks() {
+      if (!currentUser) return;
+
+      const userLinksRef = ref(db, "users/" + currentUser.uid + "/links");
+
+      onValue(userLinksRef, (snapshot) => {
+        clearLinksList();
+        if (snapshot.exists()) {
+          const links = snapshot.val();
+          for (const key in links) {
+            addLinkToDOM(key, links[key].name, links[key].url);
+          }
+        }
+      });
+    }
+
+    // Clear links list UI
+    function clearLinksList() {
+      linksList.innerHTML = "";
+    }
+
+    // Add a link item to the DOM
+    function addLinkToDOM(key, name, url) {
+      const li = document.createElement("li");
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.textContent = name;
+
+      const deleteBtn = document.createElement("button");
+      deleteBtn.textContent = "Delete";
+      deleteBtn.addEventListener("click", () => {
+        deleteLink(key);
+      });
+
+      li.appendChild(a);
+      li.appendChild(deleteBtn);
+
+      linksList.appendChild(li);
+    }
+
+    // Add a new link to Firebase DB
+    addLinkBtn.addEventListener("click", async () => {
+      const name = linkNameInput.value.trim();
+      const url = linkURLInput.value.trim();
+
+      if (!name || !url.startsWith("http")) {
+        showAddLinkMessage("Please enter valid name and URL.", true);
+        return;
+      }
+      if (!currentUser) {
+        showAddLinkMessage("User not authenticated.", true);
+        return;
+      }
+
+      const userLinksRef = ref(db, "users/" + currentUser.uid + "/links");
+
+      try {
+        const newLinkRef = push(userLinksRef);
+        await set(newLinkRef, { name, url });
+        showAddLinkMessage("Link added successfully!");
+        linkNameInput.value = "";
+        linkURLInput.value = "";
+        addLinkBtn.disabled = true;
+      } catch (error) {
+        showAddLinkMessage("Failed to add link: " + error.message, true);
+      }
+    });
+
+    // Delete a link from Firebase DB
+    async function deleteLink(linkKey) {
+      if (!currentUser) return;
+      const linkRef = ref(db, `users/${currentUser.uid}/links/${linkKey}`);
+      try {
+        await remove(linkRef);
+        showAddLinkMessage("Link deleted.");
+      } catch (error) {
+        showAddLinkMessage("Delete failed: " + error.message, true);
       }
     }
   </script>
-
 </body>
 </html>
