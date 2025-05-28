@@ -3,183 +3,498 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Login - Firebase Username Chat</title>
+<title>Messenger App</title>
 <style>
-  body {
-    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-    background: #f0f2f5;
+  body, html {
+    margin: 0; padding: 0; height: 100%;
+    font-family: Arial, sans-serif;
+    background: #f2f2f2;
+  }
+  #root {
+    height: 100vh;
     display: flex;
     justify-content: center;
     align-items: center;
-    height: 100vh;
-    margin: 0;
   }
-  #login-container {
+  .login-container {
     background: white;
-    padding: 2rem;
-    border-radius: 12px;
-    box-shadow: 0 3px 8px rgba(0,0,0,0.15);
+    padding: 30px 40px;
+    border-radius: 10px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.15);
     width: 320px;
-  }
-  #login-container h2 {
-    margin-bottom: 1rem;
     text-align: center;
-    color: #333;
   }
-  #login-container input {
-    width: 100%;
-    padding: 0.75rem;
-    margin-bottom: 1rem;
-    border-radius: 8px;
-    border: 1px solid #ccc;
-    font-size: 1rem;
+  .login-container h2 {
+    margin-bottom: 20px;
   }
-  #login-container button {
+  .login-input {
     width: 100%;
-    padding: 0.75rem;
+    padding: 10px 12px;
+    margin-bottom: 15px;
+    border: 1.5px solid #ccc;
+    border-radius: 6px;
+    font-size: 16px;
+    transition: border-color 0.3s ease;
+  }
+  .login-input:focus {
+    border-color: #007bff;
+    outline: none;
+  }
+  .login-btn {
+    width: 100%;
+    padding: 10px 0;
     background: #007bff;
-    color: white;
-    font-weight: 600;
     border: none;
-    border-radius: 8px;
+    border-radius: 6px;
+    color: white;
+    font-size: 17px;
     cursor: pointer;
-    font-size: 1rem;
     transition: background 0.3s ease;
   }
-  #login-container button:hover {
+  .login-btn:hover {
     background: #0056b3;
   }
-  #switch-mode {
-    margin-top: 1rem;
-    text-align: center;
+  .error-msg {
+    color: #d33;
+    margin-top: 10px;
+  }
+  /* Chat styles */
+  .chat-container {
+    height: 90vh;
+    width: 400px;
+    max-width: 95vw;
+    background: white;
+    display: flex;
+    flex-direction: column;
+    border-radius: 10px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+    overflow: hidden;
+  }
+  .chat-header {
+    background: #007bff;
+    color: white;
+    padding: 15px 20px;
+    font-weight: bold;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .logout-btn {
+    background: transparent;
+    border: 1.5px solid white;
+    border-radius: 6px;
+    color: white;
+    padding: 6px 14px;
     cursor: pointer;
+    font-weight: 600;
+    transition: background 0.3s ease;
+  }
+  .logout-btn:hover {
+    background: rgba(255,255,255,0.2);
+  }
+  .messages-container {
+    flex: 1;
+    padding: 15px 20px;
+    overflow-y: auto;
+    background: #e9ecef;
+  }
+  .message-row {
+    display: flex;
+    margin-bottom: 12px;
+  }
+  .message-row.you {
+    justify-content: flex-end;
+  }
+  .message-bubble {
+    max-width: 70%;
+    padding: 10px 14px;
+    border-radius: 15px;
+    position: relative;
+    font-size: 15px;
+    line-height: 1.3;
+    word-break: break-word;
+  }
+  .message-bubble.you {
+    background: #007bff;
+    color: white;
+    border-bottom-right-radius: 2px;
+  }
+  .message-bubble.other {
+    background: white;
+    color: #222;
+    border-bottom-left-radius: 2px;
+  }
+  .sender-name {
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 4px;
+    opacity: 0.7;
+  }
+  .timestamp {
+    font-size: 10px;
+    opacity: 0.5;
+    margin-top: 6px;
+    text-align: right;
+  }
+  img {
+    max-width: 100%;
+    border-radius: 10px;
+    cursor: pointer;
+  }
+  video {
+    max-width: 100%;
+    border-radius: 10px;
+    cursor: pointer;
+  }
+  audio {
+    width: 100%;
+    margin-top: 5px;
+  }
+  .file-link {
     color: #007bff;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+  .input-area {
+    display: flex;
+    padding: 10px 15px;
+    border-top: 1.5px solid #ddd;
+    background: white;
+  }
+  .input-area input[type="text"] {
+    flex-grow: 1;
+    padding: 10px 14px;
+    font-size: 15px;
+    border: 1.5px solid #ccc;
+    border-radius: 25px;
+    outline: none;
+    transition: border-color 0.3s ease;
+  }
+  .input-area input[type="text"]:focus {
+    border-color: #007bff;
+  }
+  .file-label {
+    font-size: 22px;
+    cursor: pointer;
+    padding: 0 12px;
     user-select: none;
+    line-height: 1;
+  }
+  #file-upload {
+    display: none;
+  }
+  .send-btn {
+    background: #007bff;
+    border: none;
+    color: white;
+    font-weight: 600;
+    border-radius: 25px;
+    padding: 0 20px;
+    margin-left: 10px;
+    cursor: pointer;
+    font-size: 15px;
+    transition: background 0.3s ease;
+    user-select: none;
+  }
+  .send-btn:disabled {
+    background: #8ab9ff;
+    cursor: default;
+  }
+  .send-btn.sending {
+    cursor: wait;
+  }
+  a {
+    color: #007bff;
+    word-break: break-word;
   }
 </style>
 </head>
 <body>
+<div id="root"></div>
 
-  <div id="login-container">
-    <h2 id="form-title">Login</h2>
-    <input type="text" id="username" placeholder="Username (e.g. johndoe)" />
-    <input type="password" id="password" placeholder="Password" />
-    <button id="submit-btn">Login</button>
-    <div id="switch-mode">Don't have an account? Register</div>
-  </div>
+<!-- React + Firebase SDKs -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+<script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
 
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
-import {
-  getAuth,
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword
-} from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
-import {
-  getFirestore,
-  collection,
-  query,
-  where,
-  getDocs,
-  setDoc,
-  doc
-} from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+<script>
+const e = React.createElement;
 
+// Firebase config and init
 const firebaseConfig = {
   apiKey: "AIzaSyCy9CKJ6CELheBhw7Gs0BgsE1E0FsoYdgU",
   authDomain: "project-955237504610034331.firebaseapp.com",
   projectId: "project-955237504610034331",
-  storageBucket: "project-955237504610034331.appspot.com",
+  storageBucket: "project-955237504610034331.firebasestorage.app",
   messagingSenderId: "76212939677",
   appId: "1:76212939677:web:ef498bc1e4e480ab6e5d74",
   measurementId: "G-WXBEP1LXTX"
 };
 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const storage = firebase.storage();
 
-const formTitle = document.getElementById('form-title');
-const usernameInput = document.getElementById('username');
-const passwordInput = document.getElementById('password');
-const submitBtn = document.getElementById('submit-btn');
-const switchModeDiv = document.getElementById('switch-mode');
+function Login({ onLogin }) {
+  const [username, setUsername] = React.useState("");
+  const [password, setPassword] = React.useState("");
+  const [error, setError] = React.useState("");
 
-let isLoginMode = true;
+  const validUsers = {
+    Maki: "0452",
+    Tyri: "0452"
+  };
 
-// Convert username to fake email
-function usernameToEmail(username) {
-  return username.trim().toLowerCase() + "@chatapp.fake";
+  const handleLogin = () => {
+    if (!username || !password) {
+      setError("Please enter username and password.");
+      return;
+    }
+    if (validUsers[username] === password) {
+      onLogin({ username });
+      setError("");
+    } else {
+      setError("Invalid username or password.");
+    }
+  };
+
+  return e("div", { className: "login-container" },
+    e("h2", null, "Messenger Login"),
+    e("input", {
+      className: "login-input",
+      type: "text",
+      placeholder: "Username (Maki or Tyri)",
+      value: username,
+      onChange: e => setUsername(e.target.value),
+      onKeyDown: e => { if (e.key === "Enter") handleLogin(); }
+    }),
+    e("input", {
+      className: "login-input",
+      type: "password",
+      placeholder: "Password",
+      value: password,
+      onChange: e => setPassword(e.target.value),
+      onKeyDown: e => { if (e.key === "Enter") handleLogin(); }
+    }),
+    e("button", { className: "login-btn", onClick: handleLogin }, "Login"),
+    error && e("div", { className: "error-msg" }, error)
+  );
 }
 
-// Check if username exists in Firestore
-async function isUsernameTaken(username) {
-  const usersRef = collection(db, 'users');
-  const q = query(usersRef, where('username', '==', username.toLowerCase()));
-  const querySnapshot = await getDocs(q);
-  return !querySnapshot.empty;
+function formatTimestamp(ts) {
+  if (!ts) return "";
+  const date = ts.toDate ? ts.toDate() : ts;
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-async function register(username, password) {
-  if (!username || !password) {
-    alert('Please enter username and password');
-    return;
-  }
-  if (await isUsernameTaken(username)) {
-    alert('Username already taken');
-    return;
-  }
-  const email = usernameToEmail(username);
-  try {
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    await setDoc(doc(db, 'users', userCredential.user.uid), {
-      username: username.toLowerCase()
+function Message({ message, currentUser }) {
+  const isYou = message.sender === currentUser;
+  const bubbleClass = isYou ? "message-bubble you" : "message-bubble other";
+  const { type, content } = message;
+
+  function linkify(text) {
+    const urlRegex = /(\bhttps?:\/\/[^\s]+)/gi;
+    return text.split(urlRegex).map((part, i) => {
+      if (part.match(urlRegex)) {
+        return e("a", { key: i, href: part, target: "_blank", rel: "noopener noreferrer" }, part);
+      }
+      return part;
     });
-    alert('Registration successful. You are now logged in.');
-    redirectToChat();
-  } catch (error) {
-    alert("Registration error: " + error.message);
   }
+
+  const openInNewTab = (url) => {
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
+
+  return e("div", { className: `message-row ${isYou ? "you" : "other"}` },
+    e("div", { className: bubbleClass },
+      e("div", { className: "sender-name" }, message.sender),
+      type === "text" && e("div", null, linkify(content)),
+      type === "image" && e("img", {
+        src: content,
+        alt: "sent image",
+        onClick: () => openInNewTab(content),
+        loading: "lazy"
+      }),
+      type === "video" && e("video", {
+        src: content,
+        controls: true,
+        onClick: e => e.stopPropagation()
+      }),
+      type === "audio" && e("audio", { controls: true, src: content }),
+      type === "file" && e("a", {
+        href: content,
+        className: "file-link",
+        target: "_blank",
+        rel: "noopener noreferrer"
+      }, "Open file"),
+      e("div", { className: "timestamp" }, formatTimestamp(message.createdAt))
+    )
+  );
 }
 
-async function login(username, password) {
-  if (!username || !password) {
-    alert('Please enter username and password');
-    return;
-  }
-  const email = usernameToEmail(username);
-  try {
-    await signInWithEmailAndPassword(auth, email, password);
-    redirectToChat();
-  } catch (error) {
-    alert("Login error: " + error.message);
-  }
+function ChatApp({ user, onLogout }) {
+  const [messages, setMessages] = React.useState([]);
+  const [text, setText] = React.useState("");
+  const [sending, setSending] = React.useState(false);
+  const fileInputRef = React.useRef(null);
+  const messagesEndRef = React.useRef(null);
+
+  React.useEffect(() => {
+    const unsubscribe = db.collection("messages")
+      .orderBy("createdAt", "asc")
+      .onSnapshot((snapshot) => {
+        const msgs = [];
+        snapshot.forEach(doc => {
+          msgs.push({ id: doc.id, ...doc.data() });
+        });
+        setMessages(msgs);
+        // Scroll instantly to bottom
+        messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+      });
+    return () => unsubscribe();
+  }, []);
+
+  // Optimistic send for text messages
+  const handleSendText = async () => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+
+    const localMsg = {
+      id: Date.now() + "_local",
+      sender: user.username,
+      content: trimmed,
+      type: "text",
+      createdAt: new Date()
+    };
+    setMessages(prev => [...prev, localMsg]);
+    setText("");
+
+    try {
+      await db.collection("messages").add({
+        sender: user.username,
+        content: trimmed,
+        type: "text",
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      });
+      // localMsg will be replaced by server message on snapshot update
+      setMessages(prev => prev.filter(m => m.id !== localMsg.id));
+    } catch (err) {
+      alert("Error sending message: " + err.message);
+      setMessages(prev => prev.filter(m => m.id !== localMsg.id));
+    }
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      if (!sending) handleSendText();
+    }
+  };
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) { // max 10MB
+      alert("File size exceeds 10MB limit.");
+      e.target.value = null;
+      return;
+    }
+
+    let fileType = "file";
+    if (file.type.startsWith("image/")) fileType = "image";
+    else if (file.type.startsWith("video/")) fileType = "video";
+    else if (file.type.startsWith("audio/")) fileType = "audio";
+
+    const localMsg = {
+      id: Date.now() + "_local",
+      sender: user.username,
+      content: URL.createObjectURL(file),
+      type: fileType,
+      createdAt: new Date()
+    };
+
+    setMessages(prev => [...prev, localMsg]);
+    e.target.value = null;
+
+    try {
+      const fileRef = storage.ref(`uploads/${Date.now()}_${file.name}`);
+      await fileRef.put(file);
+      const url = await fileRef.getDownloadURL();
+
+      await db.collection("messages").add({
+        sender: user.username,
+        content: url,
+        type: fileType,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      });
+
+      // Remove local preview after upload success
+      setMessages(prev => prev.filter(m => m.id !== localMsg.id));
+    } catch (err) {
+      alert("Failed to upload file: " + err.message);
+      setMessages(prev => prev.filter(m => m.id !== localMsg.id));
+    }
+  };
+
+  return e("div", { className: "chat-container" },
+    e("header", { className: "chat-header" },
+      `Logged in as: ${user.username}`,
+      e("button", { className: "logout-btn", onClick: onLogout }, "Logout")
+    ),
+    e("div", { className: "messages-container" },
+      messages.map(msg => e(Message, { key: msg.id, message: msg, currentUser: user.username })),
+      e("div", { ref: messagesEndRef })
+    ),
+    e("div", { className: "input-area" },
+      e("input", {
+        type: "text",
+        placeholder: "Type a message...",
+        value: text,
+        onChange: e => setText(e.target.value),
+        onKeyDown: handleKeyDown,
+        disabled: sending,
+        spellCheck: false,
+        autoComplete: "off",
+      }),
+      e("label", {
+        htmlFor: "file-upload",
+        className: "file-label",
+        title: "Send image, video or audio"
+      }, "📎"),
+      e("input", {
+        type: "file",
+        id: "file-upload",
+        accept: "image/*,video/*,audio/*",
+        onChange: handleFileChange,
+        disabled: sending,
+        ref: fileInputRef,
+      }),
+      e("button", {
+        className: "send-btn",
+        onClick: handleSendText,
+        disabled: sending || !text.trim()
+      }, sending ? "Sending..." : "Send")
+    )
+  );
 }
 
-function redirectToChat() {
-  // Simple redirect to chat.html after login/register
-  window.location.href = "chat.html";
+function App() {
+  const [user, setUser] = React.useState(null);
+
+  const handleLogin = (userData) => setUser(userData);
+  const handleLogout = () => setUser(null);
+
+  return user
+    ? e(ChatApp, { user, onLogout: handleLogout })
+    : e(Login, { onLogin: handleLogin });
 }
 
-submitBtn.onclick = () => {
-  const username = usernameInput.value.trim();
-  const password = passwordInput.value.trim();
-  if (isLoginMode) {
-    login(username, password);
-  } else {
-    register(username, password);
-  }
-};
-
-switchModeDiv.onclick = () => {
-  isLoginMode = !isLoginMode;
-  formTitle.textContent = isLoginMode ? "Login" : "Register";
-  submitBtn.textContent = isLoginMode ? "Login" : "Register";
-  switchModeDiv.textContent = isLoginMode
-    ? "Don't have an account? Register"
-    : "Already have an account? Login";
-};
+const domContainer = document.querySelector("#root");
+ReactDOM.createRoot(domContainer).render(e(App));
 </script>
-
 </body>
 </html>
