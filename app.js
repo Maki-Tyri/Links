@@ -1,116 +1,241 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getStorage, ref, uploadBytes, listAll, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+import { getAnalytics } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-analytics.js";
+import {
+  getAuth,
+  RecaptchaVerifier,
+  signInWithPhoneNumber,
+  onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
+import {
+  getFirestore,
+  collection,
+  addDoc,
+  query,
+  orderBy,
+  onSnapshot,
+  serverTimestamp
+} from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+import {
+  getStorage,
+  ref,
+  uploadBytes,
+  getDownloadURL
+} from "https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js";
 
-// Firebase config
+// Your Firebase config (fix storageBucket typo: .appspot.com)
 const firebaseConfig = {
-  apiKey: "AIzaSyBwNhm5g7zdAP38KV9QwuvrSQkTCqvX5jM",
-  authDomain: "budget-planner-051194.firebaseapp.com",
-  projectId: "budget-planner-051194",
-  storageBucket: "budget-planner-051194.appspot.com",
-  messagingSenderId: "4703789120",
-  appId: "1:4703789120:web:feaba0cc4cd4972c9a7fa5",
-  measurementId: "G-2QK9ZYTZRF"
+  apiKey: "AIzaSyCy9CKJ6CELheBhw7Gs0BgsE1E0FsoYdgU",
+  authDomain: "project-955237504610034331.firebaseapp.com",
+  projectId: "project-955237504610034331",
+  storageBucket: "project-955237504610034331.appspot.com",
+  messagingSenderId: "76212939677",
+  appId: "1:76212939677:web:ef498bc1e4e480ab6e5d74",
+  measurementId: "G-WXBEP1LXTX"
 };
 
-// Init services
 const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
 const auth = getAuth(app);
+const db = getFirestore(app);
 const storage = getStorage(app);
 
-// Elements
-const email = document.getElementById("email");
-const password = document.getElementById("password");
-const registerBtn = document.getElementById("registerBtn");
-const loginBtn = document.getElementById("loginBtn");
-const logoutBtn = document.getElementById("logoutBtn");
-const uploadSection = document.getElementById("uploadSection");
-const authSection = document.getElementById("authSection");
-const fileInput = document.getElementById("fileInput");
-const uploadBtn = document.getElementById("uploadBtn");
-const fileList = document.getElementById("fileList");
+const loginPage = document.getElementById('login-page');
+const chatHeadsContainer = document.getElementById('chat-heads-container');
+const chatWindow = document.getElementById('chat-window');
+const messagesDiv = document.getElementById('messages');
+const chatInput = document.getElementById('chat-input');
+const mediaInput = document.getElementById('media-input');
+const sendBtn = document.getElementById('send-btn');
 
-// Auth Events
-registerBtn.onclick = () => {
-  createUserWithEmailAndPassword(auth, email.value, password.value)
-    .then(() => alert("Registered and logged in"))
-    .catch(err => alert(err.message));
+const phoneNumberInput = document.getElementById('phone-number');
+const sendCodeBtn = document.getElementById('send-code-btn');
+const verificationCodeInput = document.getElementById('verification-code');
+const verifyCodeBtn = document.getElementById('verify-code-btn');
+
+let currentUser = null;
+let unsubscribeMessages = null;
+
+window.onload = () => {
+  window.recaptchaVerifier = new RecaptchaVerifier('recaptcha-container', {
+    size: 'invisible',
+    callback: (response) => {
+      // reCAPTCHA solved, allow sign in
+      console.log("reCAPTCHA solved");
+    }
+  }, auth);
+
+  sendCodeBtn.onclick = () => {
+    const phoneNumber = phoneNumberInput.value.trim();
+    if (!phoneNumber) {
+      alert('Please enter a phone number');
+      return;
+    }
+    const appVerifier = window.recaptchaVerifier;
+    signInWithPhoneNumber(auth, phoneNumber, appVerifier)
+      .then(confirmationResult => {
+        window.confirmationResult = confirmationResult;
+        alert('Verification code sent!');
+        verificationCodeInput.style.display = 'block';
+        verifyCodeBtn.style.display = 'block';
+      })
+      .catch(error => {
+        alert('Error sending code: ' + error.message);
+      });
+  };
+
+  verifyCodeBtn.onclick = () => {
+    const code = verificationCodeInput.value.trim();
+    if (!code) {
+      alert('Please enter verification code');
+      return;
+    }
+    window.confirmationResult.confirm(code)
+      .then(result => {
+        currentUser = result.user;
+        alert('Login successful! Welcome ' + currentUser.phoneNumber);
+        showChatUI(currentUser);
+      })
+      .catch(error => {
+        alert('Incorrect code: ' + error.message);
+      });
+  };
+
+  onAuthStateChanged(auth, user => {
+    if (user) {
+      currentUser = user;
+      showChatUI(user);
+    } else {
+      // User logged out or not logged in
+      loginPage.style.display = 'block';
+      chatHeadsContainer.style.display = 'none';
+      chatWindow.style.display = 'none';
+      if (unsubscribeMessages) unsubscribeMessages();
+    }
+  });
 };
 
-loginBtn.onclick = () => {
-  signInWithEmailAndPassword(auth, email.value, password.value)
-    .then(() => alert("Logged in"))
-    .catch(err => alert(err.message));
-};
+function showChatUI(user) {
+  loginPage.style.display = 'none';
+  chatHeadsContainer.style.display = 'block';
+  chatWindow.style.display = 'none';
 
-logoutBtn.onclick = () => {
-  signOut(auth).then(() => alert("Logged out"));
-};
+  chatHeadsContainer.innerHTML = '';
+  // For simplicity, one chat head: user self
+  const chatHead = document.createElement('button');
+  chatHead.textContent = user.phoneNumber;
+  chatHead.title = 'Open chat';
+  chatHead.onclick = () => {
+    chatWindow.style.display = 'block';
+    loadMessages();
+  };
+  chatHeadsContainer.appendChild(chatHead);
 
-// Auth state change
-onAuthStateChanged(auth, user => {
-  if (user) {
-    uploadSection.style.display = "block";
-    logoutBtn.style.display = "inline-block";
-    loginBtn.style.display = registerBtn.style.display = "none";
-    email.style.display = password.style.display = "none";
-    listFiles(user.uid);
-  } else {
-    uploadSection.style.display = "none";
-    logoutBtn.style.display = "none";
-    loginBtn.style.display = registerBtn.style.display = "inline-block";
-    email.style.display = password.style.display = "inline-block";
-  }
-});
+  sendBtn.onclick = async () => {
+    const text = chatInput.value.trim();
+    const file = mediaInput.files[0] || null;
 
-// Upload File
-uploadBtn.onclick = async () => {
-  const file = fileInput.files[0];
-  const user = auth.currentUser;
-  if (!file || !user) return;
+    if (!text && !file) {
+      alert('Enter message or select a file');
+      return;
+    }
 
-  const filePath = `${user.uid}/uploads/${file.name}`;
-  const fileRef = ref(storage, filePath);
-  await uploadBytes(fileRef, file);
-  alert("Uploaded!");
-  listFiles(user.uid);
-};
+    sendBtn.disabled = true;
 
-// List Files
-async function listFiles(userId) {
-  fileList.innerHTML = "";
-  const listRef = ref(storage, `${userId}/uploads/`);
-  const res = await listAll(listRef);
-
-  for (const itemRef of res.items) {
-    const url = await getDownloadURL(itemRef);
-    const li = document.createElement("li");
-    li.innerHTML = `
-      <strong>${itemRef.name}</strong><br>
-      ${previewHTML(url)}
-      <br><a href="${url}" target="_blank">Download</a>
-      <button onclick="deleteFile('${itemRef.fullPath}')">Delete</button>
-    `;
-    fileList.appendChild(li);
-  }
+    try {
+      await sendMessage(user, text, file);
+      chatInput.value = '';
+      mediaInput.value = null;
+    } catch (error) {
+      alert('Error sending message: ' + error.message);
+    } finally {
+      sendBtn.disabled = false;
+    }
+  };
 }
 
-// Display preview (image/video)
-function previewHTML(url) {
-  if (url.match(/\.(jpeg|jpg|png|gif)$/i)) {
-    return `<img src="${url}" />`;
-  } else if (url.match(/\.(mp4|webm|ogg)$/i)) {
-    return `<video src="${url}" controls></video>`;
+async function sendMessage(user, text, file) {
+  let mediaUrl = null;
+  let mediaType = null;
+
+  if (file) {
+    const fileRef = ref(storage, 'chatMedia/' + Date.now() + '-' + file.name);
+    await uploadBytes(fileRef, file);
+    mediaUrl = await getDownloadURL(fileRef);
+
+    if (file.type.startsWith('image/')) mediaType = 'photo';
+    else if (file.type.startsWith('video/')) mediaType = 'video';
+    else if (file.type.startsWith('audio/')) mediaType = 'audio';
   }
-  return "";
+
+  // If text is a link (http/https), mark it as text but user can click on it in UI
+  await addDoc(collection(db, 'messages'), {
+    senderId: user.uid,
+    senderPhone: user.phoneNumber,
+    text: text || null,
+    mediaUrl,
+    mediaType,
+    timestamp: serverTimestamp()
+  });
 }
 
-// Expose deleteFile globally
-window.deleteFile = async function(path) {
-  const fileRef = ref(storage, path);
-  if (confirm("Delete this file?")) {
-    await deleteObject(fileRef);
-    alert("Deleted!");
-    listFiles(auth.currentUser.uid);
+function loadMessages() {
+  if (unsubscribeMessages) unsubscribeMessages();
+
+  const messagesQuery = query(collection(db, 'messages'), orderBy('timestamp', 'asc'));
+
+  unsubscribeMessages = onSnapshot(messagesQuery, (snapshot) => {
+    messagesDiv.innerHTML = '';
+    snapshot.forEach(doc => {
+      const m = doc.data();
+      const div = document.createElement('div');
+      div.classList.add(m.senderId === currentUser.uid ? 'self' : 'other');
+
+      // Display text with clickable links
+      if (m.text) {
+        if (isValidHttpUrl(m.text)) {
+          const a = document.createElement('a');
+          a.href = m.text;
+          a.target = '_blank';
+          a.rel = 'noopener noreferrer';
+          a.textContent = m.text;
+          div.appendChild(a);
+        } else {
+          div.textContent = m.text;
+        }
+      }
+
+      // Media display
+      if (m.mediaUrl) {
+        if (m.mediaType === 'photo') {
+          const img = document.createElement('img');
+          img.src = m.mediaUrl;
+          div.appendChild(img);
+        } else if (m.mediaType === 'video') {
+          const video = document.createElement('video');
+          video.src = m.mediaUrl;
+          video.controls = true;
+          div.appendChild(video);
+        } else if (m.mediaType === 'audio') {
+          const audio = document.createElement('audio');
+          audio.src = m.mediaUrl;
+          audio.controls = true;
+          div.appendChild(audio);
+        }
+      }
+
+      messagesDiv.appendChild(div);
+    });
+
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+  });
+}
+
+function isValidHttpUrl(string) {
+  let url;
+  try {
+    url = new URL(string);
+  } catch (_) {
+    return false;
   }
+  return url.protocol === "http:" || url.protocol === "https:";
 }
