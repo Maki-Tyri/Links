@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Firebase Link Storage with Auth</title>
+  <title>Firebase File Manager with Auth</title>
   <style>
     /* Reset & base */
     * {
@@ -24,7 +24,7 @@
 
     #container {
       background: #fff;
-      max-width: 420px;
+      max-width: 520px;
       width: 100%;
       border-radius: 12px;
       padding: 32px 36px;
@@ -49,7 +49,7 @@
       font-size: 1.15rem;
     }
 
-    input[type="text"], input[type="password"], input[type="url"], input[type="email"] {
+    input[type="text"], input[type="password"], input[type="url"], input[type="email"], input[type="file"] {
       width: 100%;
       padding: 14px 16px;
       margin-bottom: 18px;
@@ -61,7 +61,7 @@
       background-color: #fafbff;
       transition: border-color 0.25s ease, box-shadow 0.25s ease;
     }
-    input[type="text"]:focus, input[type="password"]:focus, input[type="url"]:focus, input[type="email"]:focus {
+    input[type="text"]:focus, input[type="password"]:focus, input[type="url"]:focus, input[type="email"]:focus, input[type="file"]:focus {
       outline: none;
       border-color: #1877f2;
       box-shadow: 0 0 12px rgba(24, 119, 242, 0.5);
@@ -121,64 +121,88 @@
       box-shadow: 0 8px 18px rgba(68, 68, 68, 0.4);
     }
 
-    #linksList {
+    /* File manager */
+    #fileInput {
+      margin-bottom: 14px;
+    }
+
+    #filesList {
       list-style: none;
       padding-left: 0;
-      max-height: 280px;
+      max-height: 360px;
       overflow-y: auto;
       border-top: 1px solid #ddd;
       margin-top: 16px;
       user-select: text;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      justify-content: flex-start;
     }
-    #linksList::-webkit-scrollbar {
+    #filesList::-webkit-scrollbar {
       width: 8px;
     }
-    #linksList::-webkit-scrollbar-track {
+    #filesList::-webkit-scrollbar-track {
       background: #f0f0f0;
       border-radius: 4px;
     }
-    #linksList::-webkit-scrollbar-thumb {
+    #filesList::-webkit-scrollbar-thumb {
       background-color: #1877f2;
       border-radius: 4px;
     }
 
-    #linksList li {
+    #filesList li {
+      background: #f9f9f9;
+      border-radius: 12px;
+      padding: 12px;
+      box-shadow: 0 2px 8px rgba(24, 119, 242, 0.15);
+      width: 140px;
       display: flex;
-      justify-content: space-between;
+      flex-direction: column;
       align-items: center;
-      padding: 12px 8px;
-      border-bottom: 1px solid #eee;
-      gap: 8px;
-    }
-    #linksList li a {
-      color: #1877f2;
-      text-decoration: none;
-      font-weight: 600;
-      flex-grow: 1;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      position: relative;
       user-select: text;
-      transition: color 0.2s ease;
     }
-    #linksList li a:hover,
-    #linksList li a:focus {
-      text-decoration: underline;
-      color: #145dbf;
+
+    #filesList li img {
+      max-width: 100%;
+      max-height: 100px;
+      border-radius: 8px;
+      margin-bottom: 8px;
+      object-fit: cover;
     }
-    #linksList li button {
+
+    #filesList li audio,
+    #filesList li video {
+      max-width: 100%;
+      border-radius: 8px;
+      margin-bottom: 8px;
+      outline: none;
+    }
+
+    #filesList li .fileName {
+      font-size: 0.9rem;
+      text-align: center;
+      margin-bottom: 6px;
+      word-break: break-word;
+    }
+
+    #filesList li button.deleteFileBtn {
+      position: absolute;
+      top: 8px;
+      right: 8px;
       background-color: #e53935;
-      padding: 6px 14px;
-      font-size: 0.95rem;
-      width: auto;
+      border: none;
+      color: white;
+      padding: 4px 8px;
       border-radius: 6px;
-      transition: background-color 0.25s ease;
-      font-weight: 600;
-      box-shadow: 0 3px 6px rgba(229, 57, 53, 0.4);
+      font-size: 0.8rem;
       cursor: pointer;
+      box-shadow: 0 3px 6px rgba(229, 57, 53, 0.4);
       user-select: none;
+      transition: background-color 0.25s ease;
     }
-    #linksList li button:hover {
+    #filesList li button.deleteFileBtn:hover {
       background-color: #b71c1c;
       box-shadow: 0 5px 10px rgba(183, 28, 28, 0.6);
     }
@@ -208,12 +232,17 @@
     }
 
     /* Responsive */
-    @media (max-width: 480px) {
-      body {
-        padding: 10px;
-      }
+    @media (max-width: 600px) {
       #container {
         padding: 24px 20px;
+      }
+      #filesList li {
+        width: 45%;
+      }
+    }
+    @media (max-width: 360px) {
+      #filesList li {
+        width: 100%;
       }
     }
   </style>
@@ -222,257 +251,248 @@
 
   <div id="container">
 
-    <!-- LOGIN FORM -->
-    <div id="loginDiv" aria-live="polite">
-      <h2>Login to Firebase App</h2>
-      <input type="email" id="emailInput" placeholder="Email (e.g. larael@app.com)" autocomplete="username" aria-label="Email" />
-      <input type="password" id="passwordInput" placeholder="Password" autocomplete="current-password" aria-label="Password" />
-      <button id="loginBtn" aria-label="Login">Login</button>
-      <button id="registerBtn" aria-label="Register new account">Register</button>
-      <p id="loginMessage" class="message" role="alert" aria-live="assertive"></p>
+    <!-- Login/Register Form -->
+    <div id="authContainer">
+      <h2>Firebase File Manager</h2>
+      <input id="emailInput" type="email" placeholder="Email" autocomplete="username" />
+      <input id="passwordInput" type="password" placeholder="Password" autocomplete="current-password" />
+      <button id="loginBtn">Login</button>
+      <button id="registerBtn">Register</button>
+      <p class="message" id="authMessage"></p>
     </div>
 
-    <!-- APP -->
-    <div id="appDiv" style="display:none;" aria-live="polite">
-      <h2>Welcome, <span id="userNameDisplay"></span>!</h2>
-      <button id="logoutBtn" aria-label="Logout">Logout</button>
+    <!-- File Manager UI - shown after login -->
+    <div id="fileManager" style="display:none;">
+      <button id="logoutBtn">Logout</button>
+      <h3>Upload Files</h3>
+      <input type="file" id="fileInput" multiple />
+      <button id="uploadBtn" disabled>Upload Selected Files</button>
+      <p class="message" id="uploadMessage"></p>
 
-      <h3>Add a New Link</h3>
-      <input type="text" id="linkNameInput" placeholder="Link Name" aria-label="Link Name" />
-      <input type="url" id="linkURLInput" placeholder="Link URL (https://...)" aria-label="Link URL" />
-      <button id="addLinkBtn" disabled aria-label="Add Link">Add Link</button>
-      <p id="addLinkMsg" class="message" role="alert" aria-live="assertive"></p>
-
-      <h3>Your Links</h3>
-      <ul id="linksList" tabindex="0" aria-label="List of your saved links"></ul>
+      <h3>Your Files</h3>
+      <ul id="filesList" aria-live="polite"></ul>
     </div>
 
   </div>
 
-<script type="module">
-// Firebase imports
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-app.js";
-import { getDatabase, ref, push, onValue, remove } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-database.js";
-import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-auth.js";
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.6.1/firebase-app.js";
+    import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.6.1/firebase-auth.js";
+    import { getStorage, ref as storageRef, uploadBytes, listAll, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.6.1/firebase-storage.js";
 
-// Your Firebase config
-const firebaseConfig = {
-  apiKey: "AIzaSyBwNhm5g7zdAP38KV9QwuvrSQkTCqvX5jM",
-  authDomain: "budget-planner-051194.firebaseapp.com",
-  projectId: "budget-planner-051194",
-  storageBucket: "budget-planner-051194.appspot.com",
-  messagingSenderId: "4703789120",
-  appId: "1:4703789120:web:feaba0cc4cd4972c9a7fa5",
-  measurementId: "G-2QK9ZYTZRF"
-};
+    // Your Firebase configuration
+    const firebaseConfig = {
+      apiKey: "AIzaSyCbIrBsm1HdlLROnnCQGip6bXcFM2S5jns",
+      authDomain: "budget-planner-051194.firebaseapp.com",
+      databaseURL: "https://budget-planner-051194-default-rtdb.firebaseio.com",
+      projectId: "budget-planner-051194",
+      storageBucket: "budget-planner-051194.appspot.com",
+      messagingSenderId: "1054327997301",
+      appId: "1:1054327997301:web:fb387f7a9b3a507d251e47",
+      measurementId: "G-YW7QXDDZKK"
+    };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
-const auth = getAuth(app);
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const storage = getStorage(app);
 
-// Elements
-const loginDiv = document.getElementById('loginDiv');
-const appDiv = document.getElementById('appDiv');
-const emailInput = document.getElementById('emailInput');
-const passwordInput = document.getElementById('passwordInput');
-const loginBtn = document.getElementById('loginBtn');
-const registerBtn = document.getElementById('registerBtn');
-const loginMessage = document.getElementById('loginMessage');
+    // Elements
+    const authContainer = document.getElementById("authContainer");
+    const fileManager = document.getElementById("fileManager");
+    const emailInput = document.getElementById("emailInput");
+    const passwordInput = document.getElementById("passwordInput");
+    const loginBtn = document.getElementById("loginBtn");
+    const registerBtn = document.getElementById("registerBtn");
+    const logoutBtn = document.getElementById("logoutBtn");
+    const authMessage = document.getElementById("authMessage");
 
-const userNameDisplay = document.getElementById('userNameDisplay');
-const logoutBtn = document.getElementById('logoutBtn');
+    const fileInput = document.getElementById("fileInput");
+    const uploadBtn = document.getElementById("uploadBtn");
+    const uploadMessage = document.getElementById("uploadMessage");
+    const filesList = document.getElementById("filesList");
 
-const linkNameInput = document.getElementById('linkNameInput');
-const linkURLInput = document.getElementById('linkURLInput');
-const addLinkBtn = document.getElementById('addLinkBtn');
-const addLinkMsg = document.getElementById('addLinkMsg');
-const linksList = document.getElementById('linksList');
+    // Current user
+    let currentUser = null;
 
-let userLinksRef = null; // Firebase DB reference for current user links
+    // ===== AUTH =====
 
-// Helpers
-function sanitize(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
+    function showMessage(elem, msg, isError = false) {
+      elem.textContent = msg;
+      elem.className = "message " + (isError ? "error" : "success");
+      if (!msg) elem.className = "message";
+    }
 
-function validateURL(url) {
-  try {
-    let test = new URL(url);
-    return test.protocol === "http:" || test.protocol === "https:";
-  } catch {
-    return false;
-  }
-}
-
-// Enable add link button only if inputs valid
-function updateAddButtonState() {
-  const nameVal = linkNameInput.value.trim();
-  const urlVal = linkURLInput.value.trim();
-  addLinkBtn.disabled = !(nameVal.length > 0 && validateURL(urlVal));
-}
-
-// Clear link inputs and message
-function clearLinkInputs() {
-  linkNameInput.value = '';
-  linkURLInput.value = '';
-  addLinkBtn.disabled = true;
-  addLinkMsg.textContent = '';
-  addLinkMsg.className = 'message';
-}
-
-// Show links list
-function renderLinks(linksData) {
-  linksList.innerHTML = '';
-  if (!linksData) {
-    linksList.innerHTML = `<li style="text-align:center;color:#888;">No links saved yet.</li>`;
-    return;
-  }
-  for (const [key, val] of Object.entries(linksData)) {
-    const li = document.createElement('li');
-    const a = document.createElement('a');
-    a.href = val.url;
-    a.target = '_blank';
-    a.rel = 'noopener noreferrer';
-    a.textContent = val.name;
-    a.title = val.url;
-    li.appendChild(a);
-
-    const delBtn = document.createElement('button');
-    delBtn.textContent = 'Delete';
-    delBtn.setAttribute('aria-label', `Delete link ${val.name}`);
-    delBtn.onclick = () => {
-      if (confirm(`Delete link "${val.name}"?`)) {
-        remove(ref(db, `users/${auth.currentUser.uid}/links/${key}`));
+    loginBtn.onclick = async () => {
+      clearMessages();
+      const email = emailInput.value.trim();
+      const password = passwordInput.value;
+      if (!email || !password) {
+        showMessage(authMessage, "Email and password required", true);
+        return;
+      }
+      try {
+        await signInWithEmailAndPassword(auth, email, password);
+      } catch (error) {
+        showMessage(authMessage, error.message, true);
       }
     };
-    li.appendChild(delBtn);
 
-    linksList.appendChild(li);
-  }
-}
+    registerBtn.onclick = async () => {
+      clearMessages();
+      const email = emailInput.value.trim();
+      const password = passwordInput.value;
+      if (!email || !password) {
+        showMessage(authMessage, "Email and password required", true);
+        return;
+      }
+      try {
+        await createUserWithEmailAndPassword(auth, email, password);
+      } catch (error) {
+        showMessage(authMessage, error.message, true);
+      }
+    };
 
-// Firebase Auth State Listener
-onAuthStateChanged(auth, user => {
-  if (user) {
-    // Logged in
-    loginDiv.style.display = 'none';
-    appDiv.style.display = 'block';
-    userNameDisplay.textContent = user.email;
+    logoutBtn.onclick = async () => {
+      clearMessages();
+      try {
+        await signOut(auth);
+      } catch (error) {
+        alert("Logout failed: " + error.message);
+      }
+    };
 
-    // Setup DB ref for user
-    userLinksRef = ref(db, `users/${user.uid}/links`);
+    function clearMessages() {
+      showMessage(authMessage, "");
+      showMessage(uploadMessage, "");
+    }
 
-    // Listen for user links
-    onValue(userLinksRef, snapshot => {
-      renderLinks(snapshot.val());
+    // ===== FILE UPLOAD & LIST =====
+
+    // Enable upload button only if files selected
+    fileInput.onchange = () => {
+      uploadBtn.disabled = fileInput.files.length === 0;
+      uploadMessage.textContent = "";
+    };
+
+    uploadBtn.onclick = async () => {
+      if (!currentUser) return;
+      const files = fileInput.files;
+      if (!files.length) return;
+
+      uploadBtn.disabled = true;
+      showMessage(uploadMessage, "Uploading files...");
+      try {
+        for (const file of files) {
+          const userFolderRef = storageRef(storage, `users/${currentUser.uid}/${file.name}`);
+          await uploadBytes(userFolderRef, file);
+        }
+        showMessage(uploadMessage, `Uploaded ${files.length} file(s) successfully.`);
+        fileInput.value = "";
+        uploadBtn.disabled = true;
+        await loadFiles();
+      } catch (error) {
+        showMessage(uploadMessage, "Upload failed: " + error.message, true);
+      }
+      uploadBtn.disabled = false;
+    };
+
+    async function loadFiles() {
+      if (!currentUser) return;
+      filesList.innerHTML = "";
+      showMessage(uploadMessage, "Loading files...");
+      try {
+        const listRef = storageRef(storage, `users/${currentUser.uid}`);
+        const res = await listAll(listRef);
+        if (res.items.length === 0) {
+          filesList.innerHTML = `<li>No files uploaded yet.</li>`;
+          showMessage(uploadMessage, "");
+          return;
+        }
+        for (const itemRef of res.items) {
+          const url = await getDownloadURL(itemRef);
+          addFileItem(itemRef.name, url);
+        }
+        showMessage(uploadMessage, "");
+      } catch (error) {
+        showMessage(uploadMessage, "Failed to load files: " + error.message, true);
+      }
+    }
+
+    function addFileItem(filename, url) {
+      const li = document.createElement("li");
+      const ext = filename.split('.').pop().toLowerCase();
+
+      const fileNameEl = document.createElement("div");
+      fileNameEl.textContent = filename;
+      fileNameEl.className = "fileName";
+
+      let preview;
+
+      if (["png", "jpg", "jpeg", "gif", "bmp", "webp"].includes(ext)) {
+        preview = document.createElement("img");
+        preview.src = url;
+        preview.alt = filename;
+      } else if (["mp3", "wav", "ogg", "m4a"].includes(ext)) {
+        preview = document.createElement("audio");
+        preview.controls = true;
+        preview.src = url;
+      } else if (["mp4", "webm", "ogg"].includes(ext)) {
+        preview = document.createElement("video");
+        preview.controls = true;
+        preview.src = url;
+        preview.style.maxHeight = "120px";
+      } else {
+        // generic icon for unknown file types
+        preview = document.createElement("div");
+        preview.textContent = "📄";
+        preview.style.fontSize = "48px";
+        preview.style.marginBottom = "8px";
+      }
+
+      const deleteBtn = document.createElement("button");
+      deleteBtn.textContent = "Delete";
+      deleteBtn.className = "deleteFileBtn";
+      deleteBtn.onclick = async () => {
+        if (!confirm(`Delete "${filename}"? This action cannot be undone.`)) return;
+        try {
+          const fileRef = storageRef(storage, `users/${currentUser.uid}/${filename}`);
+          await deleteObject(fileRef);
+          li.remove();
+          showMessage(uploadMessage, `"${filename}" deleted.`, false);
+          if (filesList.children.length === 0) {
+            filesList.innerHTML = `<li>No files uploaded yet.</li>`;
+          }
+        } catch (error) {
+          showMessage(uploadMessage, "Delete failed: " + error.message, true);
+        }
+      };
+
+      li.appendChild(preview);
+      li.appendChild(fileNameEl);
+      li.appendChild(deleteBtn);
+      filesList.appendChild(li);
+    }
+
+    // ===== AUTH STATE CHANGE =====
+
+    onAuthStateChanged(auth, user => {
+      currentUser = user;
+      if (user) {
+        authContainer.style.display = "none";
+        fileManager.style.display = "block";
+        emailInput.value = "";
+        passwordInput.value = "";
+        clearMessages();
+        loadFiles();
+      } else {
+        authContainer.style.display = "block";
+        fileManager.style.display = "none";
+        filesList.innerHTML = "";
+        clearMessages();
+      }
     });
-
-    // Clear inputs & messages on login
-    clearLinkInputs();
-    loginMessage.textContent = '';
-  } else {
-    // Logged out
-    loginDiv.style.display = 'block';
-    appDiv.style.display = 'none';
-    loginMessage.textContent = '';
-    clearLinkInputs();
-    linksList.innerHTML = '';
-    userNameDisplay.textContent = '';
-    userLinksRef = null;
-  }
-});
-
-// Login
-loginBtn.onclick = async () => {
-  loginMessage.textContent = '';
-  loginMessage.className = 'message';
-  const email = emailInput.value.trim();
-  const password = passwordInput.value.trim();
-  if (!email || !password) {
-    loginMessage.textContent = 'Please enter email and password.';
-    loginMessage.className = 'message error';
-    return;
-  }
-  try {
-    await signInWithEmailAndPassword(auth, email, password);
-  } catch (err) {
-    loginMessage.textContent = `Login failed: ${err.message}`;
-    loginMessage.className = 'message error';
-  }
-};
-
-// Register
-registerBtn.onclick = async () => {
-  loginMessage.textContent = '';
-  loginMessage.className = 'message';
-  const email = emailInput.value.trim();
-  const password = passwordInput.value.trim();
-  if (!email || !password) {
-    loginMessage.textContent = 'Please enter email and password.';
-    loginMessage.className = 'message error';
-    return;
-  }
-  try {
-    await createUserWithEmailAndPassword(auth, email, password);
-    loginMessage.textContent = 'Registration successful! You are logged in.';
-    loginMessage.className = 'message success';
-  } catch (err) {
-    loginMessage.textContent = `Registration failed: ${err.message}`;
-    loginMessage.className = 'message error';
-  }
-};
-
-// Logout
-logoutBtn.onclick = async () => {
-  try {
-    await signOut(auth);
-  } catch (err) {
-    alert('Logout error: ' + err.message);
-  }
-};
-
-// Add Link button enable on input change
-linkNameInput.addEventListener('input', updateAddButtonState);
-linkURLInput.addEventListener('input', updateAddButtonState);
-
-// Add link
-addLinkBtn.onclick = async () => {
-  addLinkMsg.textContent = '';
-  addLinkMsg.className = 'message';
-  const name = linkNameInput.value.trim();
-  const url = linkURLInput.value.trim();
-
-  if (!name) {
-    addLinkMsg.textContent = 'Please enter a link name.';
-    addLinkMsg.className = 'message error';
-    return;
-  }
-  if (!validateURL(url)) {
-    addLinkMsg.textContent = 'Please enter a valid URL starting with http:// or https://';
-    addLinkMsg.className = 'message error';
-    return;
-  }
-  if (!userLinksRef) {
-    addLinkMsg.textContent = 'User data reference not found.';
-    addLinkMsg.className = 'message error';
-    return;
-  }
-
-  try {
-    await push(userLinksRef, { name, url });
-    addLinkMsg.textContent = 'Link added successfully!';
-    addLinkMsg.className = 'message success';
-    clearLinkInputs();
-    linkNameInput.focus();
-  } catch (err) {
-    addLinkMsg.textContent = `Failed to add link: ${err.message}`;
-    addLinkMsg.className = 'message error';
-  }
-};
-</script>
+  </script>
 
 </body>
 </html>
