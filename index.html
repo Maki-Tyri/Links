@@ -2,33 +2,42 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Firebase File Manager</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Firebase Telegram-like Chat App</title>
   <style>
-    body { font-family: sans-serif; margin: 2em; }
-    #fileList li { margin: 0.5em 0; }
-    img, video { max-width: 200px; margin-top: 0.5em; display: block; }
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    #login-page, #chat-heads-container, #chat-window { max-width: 400px; margin: auto; }
+    #chat-heads-container { position: fixed; bottom: 10px; right: 10px; }
+    #chat-heads-container button { border-radius: 50%; width: 50px; height: 50px; font-size: 12px; margin: 5px; cursor: pointer; }
+    #chat-window { border: 1px solid #ccc; padding: 10px; display: none; }
+    #messages { height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 5px; margin-bottom: 10px; }
+    #messages div { margin-bottom: 10px; padding: 5px; border-radius: 8px; background: #f1f1f1; }
+    #messages div.self { background: #d1ffd6; text-align: right; }
+    img, video, audio { max-width: 100%; border-radius: 8px; margin-top: 5px; }
   </style>
 </head>
 <body>
-  <h1>Firebase File Manager</h1>
 
-  <div id="authSection">
-    <input type="email" id="email" placeholder="Email" />
-    <input type="password" id="password" placeholder="Password" />
-    <button id="registerBtn">Register</button>
-    <button id="loginBtn">Login</button>
-    <button id="logoutBtn" style="display: none;">Logout</button>
+  <div id="login-page">
+    <h2>Login/Register</h2>
+    <input id="phone-number" placeholder="Enter phone number (+63...)" />
+    <div id="recaptcha-container"></div>
+    <button id="send-code-btn">Send Verification Code</button>
+
+    <input id="verification-code" placeholder="Enter verification code" style="display:none; margin-top: 10px;" />
+    <button id="verify-code-btn" style="display:none;">Verify Code</button>
   </div>
 
-  <div id="uploadSection" style="display:none;">
-    <h2>Upload File</h2>
-    <input type="file" id="fileInput" />
-    <button id="uploadBtn">Upload</button>
-    <h2>Your Files</h2>
-    <ul id="fileList"></ul>
+  <div id="chat-heads-container" style="display:none;"></div>
+
+  <div id="chat-window">
+    <div id="messages"></div>
+    <input id="chat-input" placeholder="Type message or paste link here" style="width: 70%;" />
+    <input type="file" id="media-input" />
+    <button id="send-btn">Send</button>
   </div>
 
   <script type="module" src="app.js"></script>
+
 </body>
 </html>
