@@ -1,10 +1,9 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
-import { getAnalytics } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-analytics.js";
 import {
   getAuth,
-  RecaptchaVerifier,
-  signInWithPhoneNumber,
-  onAuthStateChanged
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut
 } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
 import {
   getFirestore,
@@ -13,7 +12,12 @@ import {
   query,
   orderBy,
   onSnapshot,
-  serverTimestamp
+  serverTimestamp,
+  where,
+  getDocs,
+  doc,
+  setDoc,
+  getDoc
 } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 import {
   getStorage,
@@ -22,7 +26,6 @@ import {
   getDownloadURL
 } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js";
 
-// Your Firebase config (fix storageBucket typo: .appspot.com)
 const firebaseConfig = {
   apiKey: "AIzaSyCy9CKJ6CELheBhw7Gs0BgsE1E0FsoYdgU",
   authDomain: "project-955237504610034331.firebaseapp.com",
@@ -34,12 +37,19 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
 
-const loginPage = document.getElementById('login-page');
+const loginContainer = document.getElementById('login-container');
+const appContainer = document.getElementById('app');
+
+const formTitle = document.getElementById('form-title');
+const usernameInput = document.getElementById('username');
+const passwordInput = document.getElementById('password');
+const submitBtn = document.getElementById('submit-btn');
+const switchModeDiv = document.getElementById('switch-mode');
+
 const chatHeadsContainer = document.getElementById('chat-heads-container');
 const chatWindow = document.getElementById('chat-window');
 const messagesDiv = document.getElementById('messages');
@@ -47,113 +57,173 @@ const chatInput = document.getElementById('chat-input');
 const mediaInput = document.getElementById('media-input');
 const sendBtn = document.getElementById('send-btn');
 
-const phoneNumberInput = document.getElementById('phone-number');
-const sendCodeBtn = document.getElementById('send-code-btn');
-const verificationCodeInput = document.getElementById('verification-code');
-const verifyCodeBtn = document.getElementById('verify-code-btn');
-
+let isLoginMode = true;
 let currentUser = null;
 let unsubscribeMessages = null;
+let activeChatUser = null; // for multi-chat extension, here self-chat only
 
-window.onload = () => {
-  window.recaptchaVerifier = new RecaptchaVerifier('recaptcha-container', {
-    size: 'invisible',
-    callback: (response) => {
-      // reCAPTCHA solved, allow sign in
-      console.log("reCAPTCHA solved");
-    }
-  }, auth);
-
-  sendCodeBtn.onclick = () => {
-    const phoneNumber = phoneNumberInput.value.trim();
-    if (!phoneNumber) {
-      alert('Please enter a phone number');
-      return;
-    }
-    const appVerifier = window.recaptchaVerifier;
-    signInWithPhoneNumber(auth, phoneNumber, appVerifier)
-      .then(confirmationResult => {
-        window.confirmationResult = confirmationResult;
-        alert('Verification code sent!');
-        verificationCodeInput.style.display = 'block';
-        verifyCodeBtn.style.display = 'block';
-      })
-      .catch(error => {
-        alert('Error sending code: ' + error.message);
-      });
-  };
-
-  verifyCodeBtn.onclick = () => {
-    const code = verificationCodeInput.value.trim();
-    if (!code) {
-      alert('Please enter verification code');
-      return;
-    }
-    window.confirmationResult.confirm(code)
-      .then(result => {
-        currentUser = result.user;
-        alert('Login successful! Welcome ' + currentUser.phoneNumber);
-        showChatUI(currentUser);
-      })
-      .catch(error => {
-        alert('Incorrect code: ' + error.message);
-      });
-  };
-
-  onAuthStateChanged(auth, user => {
-    if (user) {
-      currentUser = user;
-      showChatUI(user);
-    } else {
-      // User logged out or not logged in
-      loginPage.style.display = 'block';
-      chatHeadsContainer.style.display = 'none';
-      chatWindow.style.display = 'none';
-      if (unsubscribeMessages) unsubscribeMessages();
-    }
-  });
-};
-
-function showChatUI(user) {
-  loginPage.style.display = 'none';
-  chatHeadsContainer.style.display = 'block';
-  chatWindow.style.display = 'none';
-
-  chatHeadsContainer.innerHTML = '';
-  // For simplicity, one chat head: user self
-  const chatHead = document.createElement('button');
-  chatHead.textContent = user.phoneNumber;
-  chatHead.title = 'Open chat';
-  chatHead.onclick = () => {
-    chatWindow.style.display = 'block';
-    loadMessages();
-  };
-  chatHeadsContainer.appendChild(chatHead);
-
-  sendBtn.onclick = async () => {
-    const text = chatInput.value.trim();
-    const file = mediaInput.files[0] || null;
-
-    if (!text && !file) {
-      alert('Enter message or select a file');
-      return;
-    }
-
-    sendBtn.disabled = true;
-
-    try {
-      await sendMessage(user, text, file);
-      chatInput.value = '';
-      mediaInput.value = null;
-    } catch (error) {
-      alert('Error sending message: ' + error.message);
-    } finally {
-      sendBtn.disabled = false;
-    }
-  };
+// Use a fake domain for emails to match username
+function usernameToEmail(username) {
+  return username.trim().toLowerCase() + "@chatapp.fake";
 }
 
-async function sendMessage(user, text, file) {
+// Check if username already exists in Firestore
+async function isUsernameTaken(username) {
+  const usersRef = collection(db, 'users');
+  const q = query(usersRef, where('username', '==', username.toLowerCase()));
+  const querySnapshot = await getDocs(q);
+  return !querySnapshot.empty;
+}
+
+// Register user
+async function register(username, password) {
+  if (!username || !password) {
+    alert('Please enter username and password');
+    return;
+  }
+  if (await isUsernameTaken(username)) {
+    alert('Username already taken');
+    return;
+  }
+  const email = usernameToEmail(username);
+  try {
+    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    // Save username in Firestore users collection
+    await setDoc(doc(db, 'users', userCredential.user.uid), {
+      username: username.toLowerCase()
+    });
+    alert('Registration successful. You are now logged in.');
+    currentUser = userCredential.user;
+    afterLogin();
+  } catch (error) {
+    alert("Registration error: " + error.message);
+  }
+}
+
+// Login user
+async function login(username, password) {
+  if (!username || !password) {
+    alert('Please enter username and password');
+    return;
+  }
+  const email = usernameToEmail(username);
+  try {
+    const userCredential = await signInWithEmailAndPassword(auth, email, password);
+    currentUser = userCredential.user;
+    afterLogin();
+  } catch (error) {
+    alert("Login error: " + error.message);
+  }
+}
+
+// After login UI setup
+function afterLogin() {
+  loginContainer.style.display = 'none';
+  appContainer.style.display = 'flex';
+  loadChatHeads();
+}
+
+// Load chat heads (for now just current user to self-chat)
+function loadChatHeads() {
+  chatHeadsContainer.innerHTML = '';
+
+  // For demo, just one chat head: self
+  getDoc(doc(db, 'users', currentUser.uid)).then(docSnap => {
+    if (docSnap.exists()) {
+      const userData = docSnap.data();
+      const chatHead = document.createElement('div');
+      chatHead.classList.add('chat-head', 'active');
+      chatHead.textContent = userData.username.charAt(0).toUpperCase();
+      chatHead.title = userData.username;
+      chatHead.onclick = () => {
+        openChatWith(userData);
+      };
+      chatHeadsContainer.appendChild(chatHead);
+      openChatWith(userData);
+    }
+  });
+}
+
+function openChatWith(userData) {
+  activeChatUser = userData;
+  messagesDiv.innerHTML = '';
+  if (unsubscribeMessages) unsubscribeMessages();
+
+  const messagesRef = collection(db, 'messages');
+  const q = query(messagesRef, orderBy('timestamp', 'asc'));
+  unsubscribeMessages = onSnapshot(q, (snapshot) => {
+    messagesDiv.innerHTML = '';
+    snapshot.forEach(doc => {
+      const m = doc.data();
+      // Show only messages between current user and activeChatUser (self chat for now)
+      if (m.senderId === currentUser.uid || m.receiverUsername === activeChatUser.username) {
+        const div = document.createElement('div');
+        div.classList.add('message');
+        div.classList.add(m.senderId === currentUser.uid ? 'self' : 'other');
+
+        if (m.text) {
+          if (isValidHttpUrl(m.text)) {
+            const a = document.createElement('a');
+            a.href = m.text;
+            a.target = '_blank';
+            a.rel = 'noopener noreferrer';
+            a.textContent = m.text;
+            div.appendChild(a);
+          } else {
+            div.textContent = m.text;
+          }
+        }
+
+        if (m.mediaUrl) {
+          if (m.mediaType === 'photo') {
+            const img = document.createElement('img');
+            img.src = m.mediaUrl;
+            div.appendChild(img);
+          } else if (m.mediaType === 'video') {
+            const video = document.createElement('video');
+            video.src = m.mediaUrl;
+            video.controls = true;
+            div.appendChild(video);
+          } else if (m.mediaType === 'audio') {
+            const audio = document.createElement('audio');
+            audio.src = m.mediaUrl;
+            audio.controls = true;
+            div.appendChild(audio);
+          }
+        }
+
+        messagesDiv.appendChild(div);
+      }
+    });
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+  });
+}
+
+// Send message handler
+sendBtn.onclick = async () => {
+  const text = chatInput.value.trim();
+  const file = mediaInput.files[0] || null;
+
+  if (!text && !file) {
+    alert('Enter message or select a file');
+    return;
+  }
+
+  sendBtn.disabled = true;
+
+  try {
+    await sendMessage(text, file);
+    chatInput.value = '';
+    mediaInput.value = null;
+  } catch (error) {
+    alert('Error sending message: ' + error.message);
+  } finally {
+    sendBtn.disabled = false;
+  }
+};
+
+// Send message function
+async function sendMessage(text, file) {
   let mediaUrl = null;
   let mediaType = null;
 
@@ -167,10 +237,9 @@ async function sendMessage(user, text, file) {
     else if (file.type.startsWith('audio/')) mediaType = 'audio';
   }
 
-  // If text is a link (http/https), mark it as text but user can click on it in UI
   await addDoc(collection(db, 'messages'), {
-    senderId: user.uid,
-    senderPhone: user.phoneNumber,
+    senderId: currentUser.uid,
+    senderUsername: activeChatUser.username,
     text: text || null,
     mediaUrl,
     mediaType,
@@ -178,58 +247,7 @@ async function sendMessage(user, text, file) {
   });
 }
 
-function loadMessages() {
-  if (unsubscribeMessages) unsubscribeMessages();
-
-  const messagesQuery = query(collection(db, 'messages'), orderBy('timestamp', 'asc'));
-
-  unsubscribeMessages = onSnapshot(messagesQuery, (snapshot) => {
-    messagesDiv.innerHTML = '';
-    snapshot.forEach(doc => {
-      const m = doc.data();
-      const div = document.createElement('div');
-      div.classList.add(m.senderId === currentUser.uid ? 'self' : 'other');
-
-      // Display text with clickable links
-      if (m.text) {
-        if (isValidHttpUrl(m.text)) {
-          const a = document.createElement('a');
-          a.href = m.text;
-          a.target = '_blank';
-          a.rel = 'noopener noreferrer';
-          a.textContent = m.text;
-          div.appendChild(a);
-        } else {
-          div.textContent = m.text;
-        }
-      }
-
-      // Media display
-      if (m.mediaUrl) {
-        if (m.mediaType === 'photo') {
-          const img = document.createElement('img');
-          img.src = m.mediaUrl;
-          div.appendChild(img);
-        } else if (m.mediaType === 'video') {
-          const video = document.createElement('video');
-          video.src = m.mediaUrl;
-          video.controls = true;
-          div.appendChild(video);
-        } else if (m.mediaType === 'audio') {
-          const audio = document.createElement('audio');
-          audio.src = m.mediaUrl;
-          audio.controls = true;
-          div.appendChild(audio);
-        }
-      }
-
-      messagesDiv.appendChild(div);
-    });
-
-    messagesDiv.scrollTop = messagesDiv.scrollHeight;
-  });
-}
-
+// Utility: validate http/https url
 function isValidHttpUrl(string) {
   let url;
   try {
@@ -239,3 +257,24 @@ function isValidHttpUrl(string) {
   }
   return url.protocol === "http:" || url.protocol === "https:";
 }
+
+// Switch login/register
+switchModeDiv.onclick = () => {
+  isLoginMode = !isLoginMode;
+  formTitle.textContent = isLoginMode ? 'Login' : 'Register';
+  submitBtn.textContent = isLoginMode ? 'Login' : 'Register';
+  switchModeDiv.textContent = isLoginMode
+    ? "Don't have an account? Register"
+    : "Already have an account? Login";
+};
+
+// Submit button click
+submitBtn.onclick = () => {
+  const username = usernameInput.value.trim();
+  const password = passwordInput.value.trim();
+  if (isLoginMode) login(username, password);
+  else register(username, password);
+};
+
+// Automatically logout on page load (for dev only, remove in prod)
+auth.signOut();
