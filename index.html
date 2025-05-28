@@ -1,74 +1,215 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>WebRTC Live Stream</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <style>body{font-family:sans-serif;text-align:center}video{width:90%;max-width:400px;border-radius:10px}</style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>WebRTC Firebase Signaling Demo</title>
+<style>
+  video { width: 45%; margin: 1%; background: black; }
+</style>
 </head>
 <body>
-  <h2>📹 WebRTC Camera Stream</h2>
-  <input id="roomId" placeholder="Enter Room ID" />
-  <br><br>
-  <button onclick="start(true)">📤 Send</button>
-  <button onclick="start(false)">📥 Receive</button>
-  <br><br>
+
+<h2>WebRTC + Firebase Realtime Database Signaling</h2>
+
+<label>Room ID: <input id="roomIdInput" placeholder="Enter room ID" /></label>
+<button id="createBtn">Create Room (Send)</button>
+<button id="joinBtn">Join Room (Receive)</button>
+<button id="hangupBtn">Hang Up</button>
+
+<div>
   <video id="localVideo" autoplay muted playsinline></video>
   <video id="remoteVideo" autoplay playsinline></video>
+</div>
 
-  <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
-  <script>
-    const socket = io("https://YOUR_SIGNALING_URL_HERE"); // <- replace after deployment
-    const localVideo = document.getElementById("localVideo");
-    const remoteVideo = document.getElementById("remoteVideo");
-    const roomId = document.getElementById("roomId");
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
+  import {
+    getDatabase,
+    ref,
+    onValue,
+    set,
+    push,
+    remove,
+    update,
+  } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
 
-    let pc, localStream;
-    const config = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+  // Your Firebase config here (replace with your own!)
+  const firebaseConfig = {
+    apiKey: "AIzaSyCy9CKJ6CELheBhw7Gs0BgsE1E0FsoYdgU",
+    authDomain: "project-955237504610034331.firebaseapp.com",
+    databaseURL: "https://project-955237504610034331-default-rtdb.firebaseio.com",
+    projectId: "project-955237504610034331",
+    storageBucket: "project-955237504610034331.appspot.com",
+    messagingSenderId: "76212939677",
+    appId: "1:76212939677:web:ef498bc1e4e480ab6e5d74",
+  };
 
-    function createPeer() {
-      pc = new RTCPeerConnection(config);
-      pc.onicecandidate = e => {
-        if (e.candidate) socket.emit("ice-candidate", { candidate: e.candidate, target: remoteId });
-      };
-      pc.ontrack = e => remoteVideo.srcObject = e.streams[0];
-    }
+  // Initialize Firebase
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
 
-    let remoteId;
+  // HTML elements
+  const roomIdInput = document.getElementById("roomIdInput");
+  const createBtn = document.getElementById("createBtn");
+  const joinBtn = document.getElementById("joinBtn");
+  const hangupBtn = document.getElementById("hangupBtn");
+  const localVideo = document.getElementById("localVideo");
+  const remoteVideo = document.getElementById("remoteVideo");
 
-    async function start(send) {
-      const room = roomId.value.trim();
-      if (!room) return alert("Enter Room ID");
-      socket.emit("join", room);
-      createPeer();
-      if (send) {
-        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        localVideo.srcObject = localStream;
-        localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+  let pc = null;
+  let localStream = null;
+  let roomRef = null;
+  let roomId = null;
+
+  // STUN servers config
+  const servers = {
+    iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+    iceCandidatePoolSize: 10,
+  };
+
+  // Get local media stream
+  async function startLocalStream() {
+    localStream = await navigator.mediaDevices.getUserMedia({
+      video: true,
+      audio: true,
+    });
+    localVideo.srcObject = localStream;
+  }
+
+  // Create RTCPeerConnection and add tracks
+  function createPeerConnection() {
+    pc = new RTCPeerConnection(servers);
+
+    // Push any ICE candidates to DB
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        const json = event.candidate.toJSON();
+        const candidateRef = push(ref(roomRef, "candidates"));
+        candidateRef.set(json);
       }
+    };
+
+    // When remote stream arrives, show it
+    pc.ontrack = (event) => {
+      if (remoteVideo.srcObject !== event.streams[0]) {
+        remoteVideo.srcObject = event.streams[0];
+      }
+    };
+
+    // Add local tracks to connection
+    localStream.getTracks().forEach((track) => {
+      pc.addTrack(track, localStream);
+    });
+  }
+
+  // Create a room (sender)
+  async function createRoom() {
+    await startLocalStream();
+    createPeerConnection();
+
+    roomId = roomIdInput.value;
+    if (!roomId) {
+      alert("Please enter a room ID!");
+      return;
     }
 
-    socket.on("new-participant", async id => {
-      remoteId = id;
+    roomRef = ref(db, "rooms/" + roomId);
+    await set(roomRef, {}); // create empty room in DB
+
+    pc.onnegotiationneeded = async () => {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-      socket.emit("offer", { sdp: offer, target: remoteId });
+
+      // Save offer to DB
+      await update(roomRef, { offer: JSON.stringify(pc.localDescription) });
+    };
+
+    // Listen for answer
+    onValue(ref(roomRef, "answer"), async (snapshot) => {
+      const answer = snapshot.val();
+      if (!answer) return;
+      const answerDesc = new RTCSessionDescription(JSON.parse(answer));
+      await pc.setRemoteDescription(answerDesc);
     });
 
-    socket.on("offer", async ({ sdp, from }) => {
-      remoteId = from;
-      await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+    // Listen for ICE candidates from remote
+    onValue(ref(roomRef, "candidates"), (snapshot) => {
+      const candidates = snapshot.val();
+      if (!candidates) return;
+      Object.values(candidates).forEach(async (candidate) => {
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (e) {
+          console.error("Error adding remote ICE candidate:", e);
+        }
+      });
+    });
+  }
+
+  // Join a room (receiver)
+  async function joinRoom() {
+    await startLocalStream();
+    createPeerConnection();
+
+    roomId = roomIdInput.value;
+    if (!roomId) {
+      alert("Please enter a room ID!");
+      return;
+    }
+
+    roomRef = ref(db, "rooms/" + roomId);
+
+    // Listen for offer
+    onValue(ref(roomRef, "offer"), async (snapshot) => {
+      const offer = snapshot.val();
+      if (!offer) return;
+
+      const offerDesc = new RTCSessionDescription(JSON.parse(offer));
+      await pc.setRemoteDescription(offerDesc);
+
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
-      socket.emit("answer", { sdp: answer, target: remoteId });
+
+      // Save answer to DB
+      await update(roomRef, { answer: JSON.stringify(pc.localDescription) });
     });
 
-    socket.on("answer", async ({ sdp }) => {
-      await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+    // Listen for ICE candidates from remote
+    onValue(ref(roomRef, "candidates"), (snapshot) => {
+      const candidates = snapshot.val();
+      if (!candidates) return;
+      Object.values(candidates).forEach(async (candidate) => {
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (e) {
+          console.error("Error adding remote ICE candidate:", e);
+        }
+      });
     });
+  }
 
-    socket.on("ice-candidate", async ({ candidate }) => {
-      await pc.addIceCandidate(new RTCIceCandidate(candidate));
-    });
-  </script>
+  // Hang up and cleanup
+  async function hangUp() {
+    if (pc) {
+      pc.close();
+    }
+    if (localStream) {
+      localStream.getTracks().forEach((track) => track.stop());
+    }
+    if (roomRef) {
+      await remove(roomRef);
+    }
+    localVideo.srcObject = null;
+    remoteVideo.srcObject = null;
+  }
+
+  // Button listeners
+  createBtn.onclick = createRoom;
+  joinBtn.onclick = joinRoom;
+  hangupBtn.onclick = hangUp;
+
+</script>
+
 </body>
 </html>
