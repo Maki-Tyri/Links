@@ -1,7 +1,8 @@
-<!DOCTYPE html> 
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <title>Live Stream</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -38,8 +39,14 @@
       font-size: 16px;
       border-radius: 5px;
     }
+
     button:hover {
       background: #555;
+    }
+
+    audio {
+      margin-top: 10px;
+      width: 320px;
     }
   </style>
 </head>
@@ -49,10 +56,11 @@
     <button id="startStreamBtn">Start Streaming (Sender)</button>
     <button id="startReceiveBtn">Start Receiving (Viewer)</button>
     <button id="fullscreenBtn">Full Screen View</button>
-    <button id="muteToggleBtn" style="display:none;">Mute</button>
+    <button id="muteBtn" style="display: none;">Mute</button>
   </div>
 
   <img id="liveStreamView" alt="Live Stream Here" />
+  <audio id="liveAudio" autoplay></audio>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.3.0/firebase-app.js";
@@ -71,10 +79,10 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
-
     const videoRef = ref(db, 'liveStream/videoFrame');
     const audioRef = ref(db, 'liveStream/audioChunk');
 
+    // START STREAMING (Sender)
     async function startStreaming() {
       const video = document.createElement('video');
       video.autoplay = true;
@@ -125,10 +133,12 @@
       document.getElementById('liveStreamView').style.display = 'block';
     }
 
+    // START RECEIVING (Viewer)
     function startReceiving() {
       const img = document.getElementById('liveStreamView');
+      const muteBtn = document.getElementById('muteBtn');
       img.style.display = 'block';
-      document.getElementById('muteToggleBtn').style.display = 'inline-block';
+      muteBtn.style.display = 'inline-block';
 
       onValue(videoRef, (snapshot) => {
         const frameData = snapshot.val();
@@ -150,27 +160,36 @@
 
         if (!window.audioContextReceiver) {
           window.audioContextReceiver = new AudioContext();
+          window.audioGainNode = window.audioContextReceiver.createGain();
           window.audioBufferQueue = [];
           window.isPlaying = false;
 
-          window.audioGainNode = window.audioContextReceiver.createGain();
-          window.audioGainNode.gain.value = 1; // default: unmuted
           window.audioGainNode.connect(window.audioContextReceiver.destination);
+
+          muteBtn.onclick = () => {
+            const gain = window.audioGainNode.gain;
+            gain.value = gain.value > 0 ? 0 : 1;
+            muteBtn.textContent = gain.value > 0 ? "Mute" : "Unmute";
+          };
+
+          document.addEventListener("visibilitychange", () => {
+            if (document.visibilityState === "visible" && window.audioContextReceiver.state === "suspended") {
+              window.audioContextReceiver.resume();
+            }
+          });
         }
 
         const audioContext = window.audioContextReceiver;
         const sampleRate = 44100;
 
-        const pcm16 = bytes;
-        const float32 = new Float32Array(pcm16.length / 2);
+        const float32 = new Float32Array(bytes.length / 2);
         for (let i = 0; i < float32.length; i++) {
-          const val = (pcm16[i * 2] | (pcm16[i * 2 + 1] << 8));
+          const val = (bytes[i * 2] | (bytes[i * 2 + 1] << 8));
           float32[i] = val < 0x8000 ? val / 0x8000 : (val - 0x10000) / 0x8000;
         }
 
         const audioBuffer = audioContext.createBuffer(1, float32.length, sampleRate);
         audioBuffer.getChannelData(0).set(float32);
-
         window.audioBufferQueue.push(audioBuffer);
 
         if (!window.isPlaying) {
@@ -188,25 +207,13 @@
           source.buffer = buffer;
           source.connect(window.audioGainNode);
           source.start();
+
           source.onended = () => {
             playAudioBufferQueue();
           };
         }
       });
     }
-
-    // Mute/Unmute toggle
-    document.getElementById('muteToggleBtn').onclick = () => {
-      if (window.audioGainNode) {
-        if (window.audioGainNode.gain.value === 1) {
-          window.audioGainNode.gain.value = 0;
-          document.getElementById('muteToggleBtn').textContent = 'Unmute';
-        } else {
-          window.audioGainNode.gain.value = 1;
-          document.getElementById('muteToggleBtn').textContent = 'Mute';
-        }
-      }
-    };
 
     function openFullscreen() {
       const elem = document.getElementById('liveStreamView');
