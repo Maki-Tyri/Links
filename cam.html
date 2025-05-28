@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Camera and Mic Access</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding: 20px;
+      background: #f0f0f0;
+    }
+    video {
+      margin-top: 20px;
+      border: 2px solid #333;
+      border-radius: 8px;
+      width: 640px;
+      height: 480px;
+      background: black;
+    }
+    button {
+      font-size: 18px;
+      padding: 10px 20px;
+      cursor: pointer;
+      border-radius: 5px;
+      border: none;
+      background-color: #007bff;
+      color: white;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    #status {
+      margin-top: 15px;
+      font-weight: bold;
+      color: #333;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Camera and Mic Access Demo</h1>
+  <button id="startBtn">Open Camera and Mic</button>
+  <div id="status"></div>
+  <video id="video" autoplay playsinline></video>
+
+  <script>
+    const startBtn = document.getElementById('startBtn');
+    const video = document.getElementById('video');
+    const status = document.getElementById('status');
+
+    startBtn.addEventListener('click', async () => {
+      try {
+        status.textContent = 'Requesting camera and mic access...';
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        video.srcObject = stream;
+        status.textContent = 'Camera and mic are now active.';
+        startBtn.disabled = true;
+      } catch (err) {
+        status.textContent = 'Access denied or error occurred.';
+        console.error(err);
+      }
+    });
+  </script>
+
+</body>
+</html>
