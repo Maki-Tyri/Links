@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Messenger App</title>
 <style>
+  /* your existing CSS unchanged */
   body, html {
     margin: 0; padding: 0; height: 100%;
     font-family: Arial, sans-serif;
@@ -212,8 +213,9 @@
 <body>
 <div id="root"></div>
 
-<!-- React + Firebase SDKs -->
+<!-- Firebase SDKs -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
 <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
@@ -234,40 +236,38 @@ const firebaseConfig = {
 };
 
 firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
 const db = firebase.firestore();
 const storage = firebase.storage();
 
 function Login({ onLogin }) {
-  const [username, setUsername] = React.useState("");
+  const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [error, setError] = React.useState("");
 
-  const validUsers = {
-    Maki: "0452",
-    Tyri: "0452"
-  };
-
   const handleLogin = () => {
-    if (!username || !password) {
-      setError("Please enter username and password.");
+    if (!email || !password) {
+      setError("Please enter email and password.");
       return;
     }
-    if (validUsers[username] === password) {
-      onLogin({ username });
-      setError("");
-    } else {
-      setError("Invalid username or password.");
-    }
+    auth.signInWithEmailAndPassword(email, password)
+      .then(userCredential => {
+        onLogin(userCredential.user);
+        setError("");
+      })
+      .catch(err => {
+        setError(err.message);
+      });
   };
 
   return e("div", { className: "login-container" },
     e("h2", null, "Messenger Login"),
     e("input", {
       className: "login-input",
-      type: "text",
-      placeholder: "Username (Maki or Tyri)",
-      value: username,
-      onChange: e => setUsername(e.target.value),
+      type: "email",
+      placeholder: "Email",
+      value: email,
+      onChange: e => setEmail(e.target.value),
       onKeyDown: e => { if (e.key === "Enter") handleLogin(); }
     }),
     e("input", {
@@ -351,20 +351,18 @@ function ChatApp({ user, onLogout }) {
           msgs.push({ id: doc.id, ...doc.data() });
         });
         setMessages(msgs);
-        // Scroll instantly to bottom
         messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
       });
     return () => unsubscribe();
   }, []);
 
-  // Optimistic send for text messages
   const handleSendText = async () => {
     const trimmed = text.trim();
     if (!trimmed) return;
 
     const localMsg = {
       id: Date.now() + "_local",
-      sender: user.username,
+      sender: user.email,
       content: trimmed,
       type: "text",
       createdAt: new Date()
@@ -374,12 +372,11 @@ function ChatApp({ user, onLogout }) {
 
     try {
       await db.collection("messages").add({
-        sender: user.username,
+        sender: user.email,
         content: trimmed,
         type: "text",
         createdAt: firebase.firestore.FieldValue.serverTimestamp(),
       });
-      // localMsg will be replaced by server message on snapshot update
       setMessages(prev => prev.filter(m => m.id !== localMsg.id));
     } catch (err) {
       alert("Error sending message: " + err.message);
@@ -398,7 +395,7 @@ function ChatApp({ user, onLogout }) {
     const file = e.target.files[0];
     if (!file) return;
 
-    if (file.size > 10 * 1024 * 1024) { // max 10MB
+    if (file.size > 10 * 1024 * 1024) {
       alert("File size exceeds 10MB limit.");
       e.target.value = null;
       return;
@@ -411,7 +408,7 @@ function ChatApp({ user, onLogout }) {
 
     const localMsg = {
       id: Date.now() + "_local",
-      sender: user.username,
+      sender: user.email,
       content: URL.createObjectURL(file),
       type: fileType,
       createdAt: new Date()
@@ -426,13 +423,12 @@ function ChatApp({ user, onLogout }) {
       const url = await fileRef.getDownloadURL();
 
       await db.collection("messages").add({
-        sender: user.username,
+        sender: user.email,
         content: url,
         type: fileType,
         createdAt: firebase.firestore.FieldValue.serverTimestamp(),
       });
 
-      // Remove local preview after upload success
       setMessages(prev => prev.filter(m => m.id !== localMsg.id));
     } catch (err) {
       alert("Failed to upload file: " + err.message);
@@ -442,11 +438,13 @@ function ChatApp({ user, onLogout }) {
 
   return e("div", { className: "chat-container" },
     e("header", { className: "chat-header" },
-      `Logged in as: ${user.username}`,
-      e("button", { className: "logout-btn", onClick: onLogout }, "Logout")
+      `Logged in as: ${user.email}`,
+      e("button", { className: "logout-btn", onClick: () => { auth.signOut(); onLogout(); } }, "Logout")
     ),
-    e("div", { className: "messages-container" },
-      messages.map(msg => e(Message, { key: msg.id, message: msg, currentUser: user.username })),
+    e("main", { className: "messages-container" },
+      messages.map(m =>
+        e(Message, { key: m.id, message: m, currentUser: user.email })
+      ),
       e("div", { ref: messagesEndRef })
     ),
     e("div", { className: "input-area" },
@@ -456,28 +454,21 @@ function ChatApp({ user, onLogout }) {
         value: text,
         onChange: e => setText(e.target.value),
         onKeyDown: handleKeyDown,
-        disabled: sending,
-        spellCheck: false,
-        autoComplete: "off",
+        disabled: sending
       }),
-      e("label", {
-        htmlFor: "file-upload",
-        className: "file-label",
-        title: "Send image, video or audio"
-      }, "📎"),
+      e("label", { htmlFor: "file-upload", className: "file-label", title: "Send file" }, "📎"),
       e("input", {
-        type: "file",
         id: "file-upload",
-        accept: "image/*,video/*,audio/*",
+        type: "file",
         onChange: handleFileChange,
-        disabled: sending,
         ref: fileInputRef,
+        disabled: sending
       }),
       e("button", {
         className: "send-btn",
         onClick: handleSendText,
         disabled: sending || !text.trim()
-      }, sending ? "Sending..." : "Send")
+      }, "Send")
     )
   );
 }
@@ -485,16 +476,20 @@ function ChatApp({ user, onLogout }) {
 function App() {
   const [user, setUser] = React.useState(null);
 
-  const handleLogin = (userData) => setUser(userData);
-  const handleLogout = () => setUser(null);
+  React.useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged(currentUser => {
+      if (currentUser) setUser(currentUser);
+      else setUser(null);
+    });
+    return () => unsubscribe();
+  }, []);
 
-  return user
-    ? e(ChatApp, { user, onLogout: handleLogout })
-    : e(Login, { onLogin: handleLogin });
+  if (!user) return e(Login, { onLogin: setUser });
+
+  return e(ChatApp, { user, onLogout: () => setUser(null) });
 }
 
-const domContainer = document.querySelector("#root");
-ReactDOM.createRoot(domContainer).render(e(App));
+ReactDOM.createRoot(document.getElementById("root")).render(e(App));
 </script>
 </body>
 </html>
