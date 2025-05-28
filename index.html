@@ -117,7 +117,8 @@
       };
 
       source.connect(processor);
-      // Do NOT connect processor to destination to avoid sender hearing themselves
+      // IMPORTANT: Do NOT connect processor to audioContext.destination,
+      // para hindi marinig ng sender sarili niyang audio
       // processor.connect(audioContext.destination);
 
       video.addEventListener('loadedmetadata', () => {
