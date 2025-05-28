@@ -3,8 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Skyblue Realtime Messenger</title>
+  <title>Skyblue Realtime Messenger with Calls</title>
   <style>
+    /* (Same style as before) */
     * { box-sizing: border-box; }
     body, html {
       margin: 0; padding: 0; height: 100%;
@@ -30,7 +31,7 @@
       overflow: hidden;
     }
     .header {
-      background: #4ca3dd; /* skyblue instead of dark green */
+      background: #4ca3dd;
       color: white;
       padding: 12px 20px;
       display: flex;
@@ -39,23 +40,26 @@
       font-weight: 600;
       font-size: 16px;
       user-select: none;
+      gap: 8px;
     }
-    .header .btn-group {
+    .btn-group {
       display: flex;
       gap: 8px;
     }
-    button.logout, button.settings {
+    button.logout, button.settings, button.call-video, button.call-audio {
       border: 1.5px solid white;
       background: transparent;
-      padding: 6px 12px;
+      padding: 6px 10px;
       border-radius: 6px;
       color: white;
       cursor: pointer;
       font-weight: 600;
       font-size: 14px;
       transition: background-color 0.25s;
+      user-select: none;
     }
-    button.logout:hover, button.settings:hover {
+    button.logout:hover, button.settings:hover,
+    button.call-video:hover, button.call-audio:hover {
       background: rgba(255 255 255 / 0.2);
     }
     .messages {
@@ -80,7 +84,7 @@
       max-width: 75%;
       padding: 12px 14px;
       border-radius: 12px;
-      background: #a9d5ff; /* lighter skyblue bubble */
+      background: #a9d5ff;
       align-self: flex-end;
       position: relative;
       word-wrap: break-word;
@@ -147,10 +151,10 @@
       transition: border-color 0.3s;
     }
     .input-area input[type="text"]:focus {
-      border-color: #4ca3dd; /* skyblue */
+      border-color: #4ca3dd;
     }
     .input-area button.send {
-      background: #4ca3dd; /* skyblue */
+      background: #4ca3dd;
       color: white;
       border: none;
       padding: 10px 16px;
@@ -165,7 +169,7 @@
       transition: background-color 0.3s;
     }
     .input-area button.send:hover {
-      background: #357abd; /* darker skyblue */
+      background: #357abd;
     }
     .input-area button.attach {
       background: transparent;
@@ -228,10 +232,73 @@
     .login-box button:hover {
       background: #357abd;
     }
+
+    /* Call modal */
+    #callModal {
+      position: fixed;
+      top:0; left:0; right:0; bottom:0;
+      background: rgba(0,0,0,0.7);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+    #callModal.active {
+      display: flex;
+    }
+    #callBox {
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      max-width: 420px;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    #callBox video {
+      width: 100%;
+      border-radius: 10px;
+      background: black;
+    }
+    #callBox audio {
+      display: none;
+    }
+    #callControls {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 10px;
+    }
+    #callControls button {
+      background: #4ca3dd;
+      border: none;
+      color: white;
+      font-weight: 700;
+      padding: 10px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      user-select: none;
+      transition: background-color 0.3s;
+    }
+    #callControls button:hover {
+      background: #357abd;
+    }
   </style>
 </head>
 <body>
   <div id="app"></div>
+
+  <!-- Call modal -->
+  <div id="callModal">
+    <div id="callBox">
+      <video id="localVideo" autoplay muted playsinline></video>
+      <video id="remoteVideo" autoplay playsinline></video>
+      <audio id="remoteAudio" autoplay></audio>
+      <div id="callControls">
+        <button id="hangupBtn">Hang Up</button>
+      </div>
+    </div>
+  </div>
 
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
@@ -240,6 +307,11 @@
 
   <script>
     const appDiv = document.getElementById('app');
+    const callModal = document.getElementById('callModal');
+    const localVideo = document.getElementById('localVideo');
+    const remoteVideo = document.getElementById('remoteVideo');
+    const remoteAudio = document.getElementById('remoteAudio');
+    const hangupBtn = document.getElementById('hangupBtn');
 
     const firebaseConfig = {
       apiKey: "AIzaSyCy9CKJ6CELheBhw7Gs0BgsE1E0FsoYdgU",
@@ -247,8 +319,8 @@
       databaseURL: "https://project-955237504610034331-default-rtdb.firebaseio.com",
       projectId: "project-955237504610034331",
       storageBucket: "project-955237504610034331.appspot.com",
-      messagingSenderId: "76212939677",
-      appId: "1:76212939677:web:ef498bc1e4e480ab6e5d74"
+      messagingSenderId: "955237504610034331",
+      appId: "1:955237504610034331:web:cd6d832647fc98c516f0d9"
     };
 
     firebase.initializeApp(firebaseConfig);
@@ -256,268 +328,483 @@
     const db = firebase.database();
     const storage = firebase.storage();
 
-    let currentDisplayName = "";
     let currentUser = null;
+    let currentDisplayName = "";
+
+    let peerConnection = null;
+    const servers = {
+      iceServers: [
+        { urls: "stun:stun.l.google.com:19302" },
+      ]
+    };
+
+    let callRef = null; // For signaling
 
     function renderLogin() {
       appDiv.innerHTML = `
-        <div class="login-box">
-          <h2>Messenger Login</h2>
-          <input type="email" id="email" placeholder="Email" autocomplete="username" />
-          <input type="password" id="password" placeholder="Password" autocomplete="current-password" />
-          <button onclick="login()">Login</button>
-        </div>
+      <div class="login-box">
+        <h2>Login / Signup</h2>
+        <input type="email" id="email" placeholder="Email" autocomplete="username" />
+        <input type="password" id="password" placeholder="Password" autocomplete="current-password" />
+        <button id="loginBtn">Login</button>
+      </div>
       `;
+      document.getElementById('loginBtn').onclick = login;
     }
 
-    function renderChat(user) {
+    async function renderChat(user) {
       currentUser = user;
+      currentDisplayName = await loadDisplayName();
+
       appDiv.innerHTML = `
         <div class="container">
           <div class="header">
-            <div id="displayName">${currentDisplayName || user.email}</div>
+            <div>
+              <span>${currentDisplayName || user.email || 'User'}</span>
+            </div>
             <div class="btn-group">
-              <button class="settings" onclick="promptChangeName()">Name</button>
-              <button class="logout" onclick="logout()">Logout</button>
+              <button class="call-video" title="Start Video Call">📹</button>
+              <button class="call-audio" title="Start Voice Call">🎤</button>
+              <button class="settings" title="Change Display Name">⚙</button>
+              <button class="logout" title="Logout">Logout</button>
             </div>
           </div>
-          <div class="messages" id="messages"></div>
+          <div id="messages" class="messages"></div>
           <div class="input-area">
             <input type="text" id="msgInput" placeholder="Type a message" autocomplete="off" />
-            <button class="attach" title="Attach media" onclick="document.getElementById('mediaInput').click()">📎</button>
-            <input type="file" id="mediaInput" accept="image/*,video/*,audio/*" onchange="sendMedia()" />
-            <button class="send" title="Send message" onclick="sendMessage()">➤</button>
+            <label class="attach" title="Attach media">
+              📎
+              <input type="file" id="mediaInput" accept="image/*,video/*,audio/*" />
+            </label>
+            <button class="send" title="Send Message">➡️</button>
           </div>
         </div>
       `;
+
+      document.querySelector('.logout').onclick = logout;
+      document.querySelector('.settings').onclick = changeDisplayName;
+      document.querySelector('.send').onclick = sendMessage;
+      document.getElementById('mediaInput').addEventListener('change', sendMedia);
+
+      document.querySelector('.call-video').onclick = () => startCall(true);
+      document.querySelector('.call-audio').onclick = () => startCall(false);
+
       loadMessages(user);
-      scrollToBottom();
     }
 
+    // Display name loading and changing
     async function loadDisplayName() {
-      if (!currentUser) return;
-      const nameRef = db.ref(`displayNames/${currentUser.uid}`);
-      const snapshot = await nameRef.once('value');
-      const name = snapshot.val();
-      if (name) {
-        currentDisplayName = name;
-      } else {
-        currentDisplayName = currentUser.email;
+      const snap = await db.ref(`displayNames/${currentUser.uid}`).once('value');
+      return snap.val() || "";
+    }
+
+    async function changeDisplayName() {
+      const newName = prompt("Enter your new display name:", currentDisplayName);
+      if (newName !== null) {
+        await db.ref(`displayNames/${currentUser.uid}`).set(newName);
+        currentDisplayName = newName;
+        // Update header
+        document.querySelector('.header > div > span').textContent = newName || currentUser.email || "User";
       }
     }
 
-    function promptChangeName() {
-      const newName = prompt("Enter your display name:", currentDisplayName || "");
-      if (newName && newName.trim().length >= 2) {
-        currentDisplayName = newName.trim();
-        document.getElementById('displayName').textContent = currentDisplayName;
-        db.ref(`displayNames/${currentUser.uid}`).set(currentDisplayName);
-      } else if (newName !== null) {
-        alert("Display name must be at least 2 characters.");
-      }
-    }
-
+    // Messages display
     function displayMessage(id, msg) {
       const messagesDiv = document.getElementById("messages");
       if (!messagesDiv) return;
 
-      // Skip if message already exists (avoid duplicates)
-      if (document.getElementById('msg-' + id)) return;
+      // Ignore if message deleted
+      if (!msg) return;
 
-      let div = document.createElement("div");
-      div.classList.add("message");
-      div.id = 'msg-' + id;
-      if (msg.sender !== currentUser.uid) div.classList.add("other");
+      // Check if message div exists, update or create
+      let div = document.getElementById("msg-" + id);
+      if (!div) {
+        div = document.createElement("div");
+        div.id = "msg-" + id;
+        div.classList.add("message");
+        messagesDiv.appendChild(div);
+      }
 
+      div.classList.toggle("other", msg.sender !== currentUser.uid);
+      div.innerHTML = "";
+
+      const senderName = msg.sender === currentUser.uid ? currentDisplayName || currentUser.email : "";
+      // Get display name for other sender, cache it for performance
       if (msg.sender !== currentUser.uid) {
-        getDisplayName(msg.sender).then(senderName => {
-          const strong = document.createElement('strong');
-          strong.textContent = senderName || "Unknown";
-          div.insertBefore(strong, div.firstChild);
+        // Async get display name (non-blocking)
+        db.ref(`displayNames/${msg.sender}`).once('value').then(snap => {
+          const name = snap.val() || "User";
+          const strong = div.querySelector("strong");
+          if (strong) strong.textContent = name;
         });
       }
 
-      if (msg.text) {
-        const textNode = document.createTextNode(msg.text);
-        div.appendChild(textNode);
+      if (senderName) {
+        const strong = document.createElement("strong");
+        strong.textContent = senderName;
+        div.appendChild(strong);
+      } else if (msg.sender !== currentUser.uid) {
+        const strong = document.createElement("strong");
+        strong.textContent = "Loading...";
+        div.appendChild(strong);
       }
 
-      if (msg.mediaURL) {
+      if (msg.text) {
+        const p = document.createElement("p");
+        p.textContent = msg.text;
+        div.appendChild(p);
+      }
+
+      if (msg.mediaURL && msg.mediaType) {
         let mediaElem = null;
         if (msg.mediaType.startsWith('image/')) {
           mediaElem = document.createElement('img');
           mediaElem.src = msg.mediaURL;
-          mediaElem.alt = "image";
+          mediaElem.style.maxWidth = "200px";
           mediaElem.loading = "lazy";
         } else if (msg.mediaType.startsWith('video/')) {
           mediaElem = document.createElement('video');
           mediaElem.src = msg.mediaURL;
           mediaElem.controls = true;
           mediaElem.preload = "metadata";
+          mediaElem.style.maxHeight = "200px";
         } else if (msg.mediaType.startsWith('audio/')) {
           mediaElem = document.createElement('audio');
           mediaElem.src = msg.mediaURL;
           mediaElem.controls = true;
           mediaElem.preload = "metadata";
+          mediaElem.style.maxHeight = "40px";
         }
-        if (mediaElem) {
-          div.appendChild(document.createElement('br'));
-          div.appendChild(mediaElem);
-        }
+        if (mediaElem) div.appendChild(mediaElem);
       }
 
-      const tsDiv = document.createElement('div');
-      tsDiv.className = "timestamp";
-      const date = new Date(msg.timestamp || Date.now());
-      tsDiv.textContent = date.toLocaleString();
-      div.appendChild(tsDiv);
+      const timeDiv = document.createElement("div");
+      timeDiv.classList.add("timestamp");
+      timeDiv.textContent = new Date(msg.timestamp).toLocaleString();
+      div.appendChild(timeDiv);
 
+      // Delete button only for own messages
       if (msg.sender === currentUser.uid) {
-        const deleteBtn = document.createElement('button');
-        deleteBtn.className = 'delete-btn';
-        deleteBtn.title = "Delete message";
-        deleteBtn.textContent = "×";
-        deleteBtn.onclick = () => {
-          if (confirm("Delete this message?")) {
-            deleteMessage(id, msg);
-          }
-        };
-        div.appendChild(deleteBtn);
+        const delBtn = document.createElement('button');
+        delBtn.classList.add('delete-btn');
+        delBtn.title = "Delete message";
+        delBtn.textContent = "✕";
+        delBtn.onclick = () => deleteMessage(id, msg);
+        div.appendChild(delBtn);
       }
 
-      messagesDiv.appendChild(div);
-      scrollToBottom();
-    }
-
-    async function getDisplayName(uid) {
-      const snapshot = await db.ref(`displayNames/${uid}`).once('value');
-      return snapshot.val() || "Anonymous";
-    }
-
-    function scrollToBottom() {
-      const messagesDiv = document.getElementById("messages");
-      if (messagesDiv) {
-        messagesDiv.scrollTop = messagesDiv.scrollHeight;
-      }
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
     }
 
     function loadMessages(user) {
-      const messagesDiv = document.getElementById("messages");
-      messagesDiv.innerHTML = "";
+      const messagesRef = db.ref('messages');
 
-      const messagesRef = db.ref('messages').limitToLast(100);
-      messagesRef.off();
+      messagesRef.off(); // Remove previous listeners
 
       messagesRef.on('child_added', snapshot => {
         const msg = snapshot.val();
         displayMessage(snapshot.key, msg);
       });
+
       messagesRef.on('child_removed', snapshot => {
-        const msgId = snapshot.key;
-        const el = document.getElementById('msg-' + msgId);
-        if (el) el.remove();
+        const msgDiv = document.getElementById('msg-' + snapshot.key);
+        if (msgDiv) msgDiv.remove();
       });
     }
 
-    function sendMessage() {
+    async function sendMessage() {
       const input = document.getElementById("msgInput");
-      if (!input.value.trim()) return;
       const text = input.value.trim();
-      const msgData = {
+      if (!text) return;
+      if (!currentUser) return alert("Not logged in!");
+
+      const messagesRef = db.ref('messages');
+      const newMsgRef = messagesRef.push();
+
+      const messageData = {
         text,
         sender: currentUser.uid,
         timestamp: Date.now()
       };
-      db.ref('messages').push(msgData);
+
+      await newMsgRef.set(messageData);
       input.value = "";
     }
 
-    // Limit media size to 1GB
-    const MAX_MEDIA_SIZE = 1024 * 1024 * 1024; // 1GB in bytes
-
     async function sendMedia() {
-      const fileInput = document.getElementById("mediaInput");
+      const fileInput = document.getElementById('mediaInput');
       if (fileInput.files.length === 0) return;
+      if (!currentUser) return alert("Not logged in!");
 
       const file = fileInput.files[0];
-      fileInput.value = ""; // reset input
+      fileInput.value = "";
 
-      if (file.size > MAX_MEDIA_SIZE) {
-        alert("File size exceeds 1GB limit.");
-        return;
-      }
-
-      const msgId = db.ref('messages').push().key;
-      const storageRef = storage.ref(`chat_media/${currentUser.uid}/${msgId}_${file.name}`);
+      const messagesRef = db.ref('messages');
+      const newMsgRef = messagesRef.push();
 
       try {
-        const uploadTaskSnapshot = await storageRef.put(file);
-        const downloadURL = await uploadTaskSnapshot.ref.getDownloadURL();
+        const storageRef = storage.ref(`media/${currentUser.uid}/${newMsgRef.key}_${file.name}`);
+        const snapshot = await storageRef.put(file);
+        const downloadURL = await snapshot.ref.getDownloadURL();
 
-        const msgData = {
-          sender: currentUser.uid,
+        const messageData = {
           mediaURL: downloadURL,
           mediaType: file.type,
+          sender: currentUser.uid,
           timestamp: Date.now()
         };
-        await db.ref(`messages/${msgId}`).set(msgData);
+        await newMsgRef.set(messageData);
       } catch (error) {
-        alert("Upload failed: " + error.message);
+        alert("Failed to upload media: " + error.message);
       }
     }
 
     async function deleteMessage(id, msg) {
-      if (msg.mediaURL) {
-        try {
-          const storageRef = storage.refFromURL(msg.mediaURL);
-          await storageRef.delete();
-        } catch (err) {
-          console.warn("Failed to delete media from storage:", err.message);
+      if (!confirm("Delete this message?")) return;
+
+      try {
+        await db.ref(`messages/${id}`).remove();
+
+        if (msg.mediaURL) {
+          const fileRef = storage.refFromURL(msg.mediaURL);
+          await fileRef.delete();
         }
+      } catch (e) {
+        console.warn("Error deleting message/media:", e);
       }
-      await db.ref(`messages/${id}`).remove();
+    }
+
+    // Auth functions
+    async function logout() {
+      await auth.signOut();
     }
 
     async function login() {
       const emailInput = document.getElementById("email");
-      const passInput = document.getElementById("password");
+      const passwordInput = document.getElementById("password");
       const email = emailInput.value.trim();
-      const password = passInput.value;
+      const password = passwordInput.value;
+
       if (!email || !password) {
-        alert("Please enter email and password.");
+        alert("Please enter email and password");
         return;
       }
+
       try {
-        const userCredential = await auth.signInWithEmailAndPassword(email, password);
-        currentUser = userCredential.user;
-        await loadDisplayName();
-        renderChat(currentUser);
-      } catch (error) {
-        alert("Login failed: " + error.message);
+        await auth.signInWithEmailAndPassword(email, password);
+      } catch (e) {
+        if (e.code === "auth/user-not-found") {
+          if (confirm("User not found. Create account?")) {
+            try {
+              await auth.createUserWithEmailAndPassword(email, password);
+            } catch (e2) {
+              alert("Failed to create user: " + e2.message);
+            }
+          }
+        } else {
+          alert("Login failed: " + e.message);
+        }
       }
     }
 
-    function logout() {
-      auth.signOut();
+    // WebRTC Call functionality
+
+    async function startCall(isVideo) {
+      if (!currentUser) return alert("Not logged in!");
+      if (peerConnection) {
+        alert("Call already in progress");
+        return;
+      }
+
+      // Prompt user for the uid of the other party (in a real app you'd have contacts or chat partner)
+      const otherUid = prompt("Enter the UID of the user you want to call:");
+      if (!otherUid) return;
+
+      callRef = db.ref(`calls/${currentUser.uid}_${otherUid}`);
+      const otherCallRef = db.ref(`calls/${otherUid}_${currentUser.uid}`);
+
+      peerConnection = new RTCPeerConnection(servers);
+
+      // Setup media
+      let constraints = { audio: true };
+      if (isVideo) constraints.video = true;
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        stream.getTracks().forEach(track => peerConnection.addTrack(track, stream));
+        localVideo.srcObject = stream;
+      } catch (e) {
+        alert("Failed to get local media: " + e.message);
+        cleanupCall();
+        return;
+      }
+
+      // Show modal
+      callModal.classList.add('active');
+      remoteVideo.style.display = isVideo ? 'block' : 'none';
+      remoteAudio.style.display = isVideo ? 'none' : 'block';
+
+      peerConnection.onicecandidate = event => {
+        if (event.candidate) {
+          callRef.child('candidates').push(event.candidate.toJSON());
+        }
+      };
+
+      peerConnection.ontrack = event => {
+        const remoteStream = event.streams[0];
+        if (isVideo) {
+          remoteVideo.srcObject = remoteStream;
+        } else {
+          remoteAudio.srcObject = remoteStream;
+        }
+      };
+
+      // Listen for answer & candidates from other user
+      otherCallRef.on('value', async snapshot => {
+        const data = snapshot.val();
+        if (!data) return;
+        if (data.answer && peerConnection.signalingState !== "stable") {
+          await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+        }
+        if (data.candidates) {
+          Object.values(data.candidates).forEach(async candidate => {
+            try {
+              await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+            } catch(e) {
+              console.warn("Error adding ICE candidate", e);
+            }
+          });
+        }
+      });
+
+      // Create offer and set local description
+      const offer = await peerConnection.createOffer();
+      await peerConnection.setLocalDescription(offer);
+
+      await callRef.set({
+        offer: offer.toJSON(),
+        caller: currentUser.uid,
+        callee: otherUid,
+        candidates: null,
+        answer: null
+      });
+
+      hangupBtn.onclick = hangupCall;
+
+      // Listen for hangup
+      otherCallRef.child('hangup').on('value', snap => {
+        if (snap.exists()) {
+          alert("Call ended by remote user.");
+          cleanupCall();
+        }
+      });
     }
 
-    auth.onAuthStateChanged(async (user) => {
+    // Incoming call listener
+    function listenForIncomingCalls() {
+      if (!currentUser) return;
+      const incomingCallsRef = db.ref('calls');
+      incomingCallsRef.on('child_added', async snapshot => {
+        const callId = snapshot.key;
+        const data = snapshot.val();
+
+        if (!data) return;
+        if (data.callee === currentUser.uid && !peerConnection) {
+          const accept = confirm(`Incoming call from ${data.caller}. Accept?`);
+          if (!accept) {
+            db.ref(`calls/${callId}/hangup`).set(true);
+            return;
+          }
+          await answerCall(callId, data);
+        }
+      });
+    }
+
+    async function answerCall(callId, callData) {
+      peerConnection = new RTCPeerConnection(servers);
+
+      let constraints = { audio: true };
+      if (callData.offer.sdp.includes('m=video')) {
+        constraints.video = true;
+      }
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        stream.getTracks().forEach(track => peerConnection.addTrack(track, stream));
+        localVideo.srcObject = stream;
+      } catch (e) {
+        alert("Failed to get local media: " + e.message);
+        cleanupCall();
+        return;
+      }
+
+      const callRef = db.ref(`calls/${callId}`);
+
+      peerConnection.onicecandidate = event => {
+        if (event.candidate) {
+          callRef.child('candidates').push(event.candidate.toJSON());
+        }
+      };
+
+      peerConnection.ontrack = event => {
+        const remoteStream = event.streams[0];
+        if (constraints.video) {
+          remoteVideo.srcObject = remoteStream;
+        } else {
+          remoteAudio.srcObject = remoteStream;
+        }
+      };
+
+      await peerConnection.setRemoteDescription(new RTCSessionDescription(callData.offer));
+      const answer = await peerConnection.createAnswer();
+      await peerConnection.setLocalDescription(answer);
+
+      await callRef.update({ answer: answer.toJSON() });
+
+      callModal.classList.add('active');
+      remoteVideo.style.display = constraints.video ? 'block' : 'none';
+      remoteAudio.style.display = constraints.video ? 'none' : 'block';
+
+      hangupBtn.onclick = () => {
+        db.ref(`calls/${callId}/hangup`).set(true);
+        cleanupCall();
+      };
+
+      // Listen for hangup
+      callRef.child('hangup').on('value', snap => {
+        if (snap.exists()) {
+          alert("Call ended by remote user.");
+          cleanupCall();
+        }
+      });
+    }
+
+    function cleanupCall() {
+      if (peerConnection) {
+        peerConnection.close();
+        peerConnection = null;
+      }
+      callModal.classList.remove('active');
+      localVideo.srcObject = null;
+      remoteVideo.srcObject = null;
+      remoteAudio.srcObject = null;
+      callRef = null;
+    }
+
+    // On auth state change
+    auth.onAuthStateChanged(user => {
       if (user) {
-        currentUser = user;
-        await loadDisplayName();
         renderChat(user);
+        listenForIncomingCalls();
       } else {
-        currentUser = null;
         renderLogin();
       }
     });
 
-    // Expose functions globally for inline handlers
-    window.login = login;
-    window.logout = logout;
-    window.sendMessage = sendMessage;
-    window.sendMedia = sendMedia;
-    window.promptChangeName = promptChangeName;
+    // Initial render
+    renderLogin();
+
   </script>
+
 </body>
 </html>
