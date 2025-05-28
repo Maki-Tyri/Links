@@ -12,7 +12,7 @@
       align-items: center;
       padding-top: 100px;
     }
-    .login-box, .player-box {
+    .login-box {
       background: white;
       padding: 30px;
       border-radius: 10px;
@@ -28,17 +28,11 @@
       padding: 10px 20px;
       margin-top: 10px;
     }
-    video, iframe {
-      width: 100%;
-      max-width: 800px;
-      height: 450px;
-      margin-top: 20px;
-    }
   </style>
 </head>
 <body>
 
-  <div class="login-box" id="loginBox">
+  <div class="login-box">
     <h2>Login</h2>
     <input type="text" id="username" placeholder="Username"><br>
     <input type="password" id="password" placeholder="Password"><br>
@@ -46,18 +40,7 @@
     <p id="message" style="color: red;"></p>
   </div>
 
-  <div class="player-box" id="playerBox" style="display: none;">
-    <h2>Playing Videos...</h2>
-    <div id="videoContainer"></div>
-  </div>
-
   <script>
-    const videoLinks = [
-      "https://maki-tyri.github.io/Tyri-052526/video.mp4",
-      "https://maki-tyri.github.io/PROPOSAL/video.mp4"
-      // 👉 Add more video/mp4 links here in order
-    ];
-
     function login() {
       const user = document.getElementById('username').value;
       const pass = document.getElementById('password').value;
@@ -65,47 +48,39 @@
 
       if (user === "Larael" && pass === "112624") {
         message.textContent = "";
-        document.getElementById('loginBox').style.display = "none";
-        document.getElementById('playerBox').style.display = "block";
-        playVideosSequentially();
+        
+        const links = [
+          "https://www.capcut.com/s/CSDGmACIek4q9IY9/",
+          "https://www.capcut.com/s/CUWlBbHY43irH5M7/",
+          "https://www.capcut.com/s/CWHCsoq64YAsMKof/",
+	  "https://www.capcut.com/s/CaR-dTUgZz2BrUsd/",
+	  "https://www.capcut.com/s/CWoskQkYL0s9EtgB/",
+          "https://maki-tyri.github.io/Tyri-052526/",
+          "https://maki-tyri.github.io/PROPOSAL/"
+          // ⬇️ Add more links here:
+          // "https://your-next-link.com"
+        ];
+
+        alert("Login successful! Playing your playlist...");
+        playLinksSequentially(links);
       } else {
         message.textContent = "Invalid username or password!";
       }
     }
 
-    function playVideosSequentially() {
-      const container = document.getElementById('videoContainer');
+    function playLinksSequentially(links) {
       let index = 0;
-
-      function playNext() {
-        if (index >= videoLinks.length) {
-          container.innerHTML = "<p>All videos finished playing.</p>";
-          return;
-        }
-
-        container.innerHTML = ""; // clear old video
-
-        const video = document.createElement('video');
-        video.src = videoLinks[index];
-        video.controls = true;
-        video.autoplay = true;
-
-        video.onended = () => {
-          index++;
-          playNext();
-        };
-
-        container.appendChild(video);
+      function openNext() {
+        if (index >= links.length) return;
+        const win = window.open(links[index], "_blank");
+        index++;
+        setTimeout(openNext, 180000); // ⏱ change delay if needed (in ms) — currently 10s per link
       }
-
-      playNext();
+      openNext();
     }
   </script>
 
-  <!-- ✨ To add more videos:
-      - Upload .mp4 files to your GitHub Pages site or a hosting that gives direct .mp4 link
-      - Add the links to the `videoLinks` array in order above.
-  -->
+  <!-- ✨ Add more links above in the `links` array. They will play one by one in new tabs -->
 
 </body>
 </html>
