@@ -25,7 +25,6 @@
       display: none;
     }
 
-    /* Hide sender's local video */
     #localVideo {
       display: none;
       position: fixed;
@@ -125,8 +124,6 @@
 
     let senderGainNode = null;
     let receiverGainNode = null;
-
-    // Audio playback queue for smooth audio streaming at viewer side
     let audioBufferQueue = [];
     let isPlayingAudio = false;
 
@@ -147,7 +144,6 @@
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
 
-        // Faster update for less delay
         setInterval(() => {
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
           set(videoRef, canvas.toDataURL('image/jpeg', 0.4));
@@ -160,11 +156,8 @@
       senderGainNode.gain.value = 1;
       source.connect(senderGainNode);
 
-      // Connect gainNode to destination but muted to prevent sender hearing own audio
       const dest = audioCtx.createMediaStreamDestination();
       senderGainNode.connect(dest);
-      // No connection to audioCtx.destination => sender won't hear own mic
-
       const processor = audioCtx.createScriptProcessor(2048, 1, 1);
       senderGainNode.connect(processor);
       processor.connect(dest);
