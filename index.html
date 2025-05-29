@@ -1,4 +1,302 @@
-<!DOCTYPE html> 
+<!DOCT<!DOCTYPE html> 
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Live Stream</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #111;
+      color: white;
+      margin: 0;
+      padding: 0;
+    }
+
+    #liveStreamView {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      object-fit: contain;
+      background: black;
+      z-index: 1;
+      display: none;
+    }
+
+    #localVideo {
+      display: none;
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      width: 120px;
+      height: 80px;
+      object-fit: cover;
+      border: 2px solid white;
+      z-index: 2;
+    }
+
+    .controls {
+      position: fixed;
+      bottom: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 3;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 8px;
+      background: rgba(0, 0, 0, 0.7);
+      padding: 10px 15px;
+      border-radius: 10px;
+      transition: opacity 0.3s;
+    }
+
+    .controls.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    button {
+      background: #333;
+      border: none;
+      color: white;
+      padding: 10px;
+      font-size: 14px;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #555;
+    }
+
+    .volume-display {
+      display: flex;
+      align-items: center;
+      font-size: 14px;
+      min-width: 40px;
+      justify-content: center;
+    }
+  </style>
+</head>
+<body>
+  <video id="localVideo" autoplay muted playsinline></video>
+  <img id="liveStreamView" alt="Live Stream" />
+
+  <div class="controls" id="controls">
+    <button id="startStreamBtn">Start Sender</button>
+    <button id="switchCameraBtn">Switch Camera</button>
+    <button id="startReceiveBtn">Start Viewer</button>
+    <button id="fullscreenBtn">Fullscreen</button>
+    <button id="muteBtn">Mute</button>
+    <button id="volDownBtn">-</button>
+    <div class="volume-display" id="volDisplay">100%</div>
+    <button id="volUpBtn">+</button>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.3.0/firebase-app.js";
+    import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.3.0/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyCy9CKJ6CELheBhw7Gs0BgsE1E0FsoYdgU",
+      authDomain: "project-955237504610034331.firebaseapp.com",
+      databaseURL: "https://project-955237504610034331-default-rtdb.firebaseio.com",
+      projectId: "project-955237504610034331",
+      storageBucket: "project-955237504610034331.appspot.com",
+      messagingSenderId: "76212939677",
+      appId: "1:76212939677:web:ef498bc1e4e480ab6e5d74"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+    const videoRef = ref(db, 'liveStream/video');
+    const audioRef = ref(db, 'liveStream/audio');
+
+    const localVideo = document.getElementById('localVideo');
+    const liveStreamView = document.getElementById('liveStreamView');
+    const controls = document.getElementById('controls');
+    const muteBtn = document.getElementById('muteBtn');
+    const volUpBtn = document.getElementById('volUpBtn');
+    const volDownBtn = document.getElementById('volDownBtn');
+    const volDisplay = document.getElementById('volDisplay');
+    const switchCameraBtn = document.getElementById('switchCameraBtn');
+
+    let senderGainNode = null;
+    let receiverGainNode = null;
+    let audioBufferQueue = [];
+    let isPlayingAudio = false;
+
+    // Keep track of current camera facing mode
+    let currentFacingMode = "user"; // default front camera
+    let currentStream = null;
+    let drawAnimationFrameId = null;
+
+    async function startStream(facingMode = "user") {
+      // Stop previous stream and cancel animation frame if any
+      if (currentStream) {
+        currentStream.getTracks().forEach(track => track.stop());
+        currentStream = null;
+      }
+      if (drawAnimationFrameId) {
+        cancelAnimationFrame(drawAnimationFrameId);
+        drawAnimationFrameId = null;
+      }
+
+      const constraints = {
+        video: { facingMode },
+        audio: true
+      };
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      currentStream = stream;
+      localVideo.srcObject = stream;
+
+      const video = document.createElement('video');
+      video.srcObject = stream;
+      video.muted = true;
+      video.playsInline = true;
+
+      await video.play(); // Wait for video to start
+
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+
+      // Draw loop using requestAnimationFrame
+      function drawFrame() {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        set(videoRef, canvas.toDataURL('image/jpeg', 0.4));
+        drawAnimationFrameId = requestAnimationFrame(drawFrame);
+      }
+      drawFrame();
+
+      // Audio setup (same as your original code)
+      const audioCtx = new AudioContext();
+      const source = audioCtx.createMediaStreamSource(stream);
+      senderGainNode = audioCtx.createGain();
+      senderGainNode.gain.value = 1;
+      source.connect(senderGainNode);
+
+      const dest = audioCtx.createMediaStreamDestination();
+      senderGainNode.connect(dest);
+      const processor = audioCtx.createScriptProcessor(2048, 1, 1);
+      senderGainNode.connect(processor);
+      processor.connect(dest);
+
+      processor.onaudioprocess = e => {
+        const input = e.inputBuffer.getChannelData(0);
+        const buffer = new ArrayBuffer(input.length * 2);
+        const view = new DataView(buffer);
+        for (let i = 0; i < input.length; i++) {
+          const s = Math.max(-1, Math.min(1, input[i])) * 0x7FFF;
+          view.setInt16(i * 2, s, true);
+        }
+        set(audioRef, btoa(String.fromCharCode(...new Uint8Array(buffer))));
+      };
+    }
+
+    document.getElementById('startStreamBtn').onclick = async () => {
+      currentFacingMode = "user"; // reset to front camera when starting stream
+      await startStream(currentFacingMode);
+    };
+
+    switchCameraBtn.onclick = async () => {
+      if (!currentStream) return; // Do nothing if stream not started
+
+      // Toggle camera facing mode
+      currentFacingMode = currentFacingMode === "user" ? "environment" : "user";
+      await startStream(currentFacingMode);
+    };
+
+    document.getElementById('startReceiveBtn').onclick = () => {
+      liveStreamView.style.display = 'block';
+
+      onValue(videoRef, snap => {
+        if (snap.exists()) liveStreamView.src = snap.val();
+      });
+
+      onValue(audioRef, snap => {
+        if (!snap.exists()) return;
+        const bin = atob(snap.val());
+        const buf = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+
+        if (!window.audioContext) {
+          window.audioContext = new AudioContext();
+          receiverGainNode = window.audioContext.createGain();
+          receiverGainNode.gain.value = 1;
+          receiverGainNode.connect(window.audioContext.destination);
+        }
+
+        const floatData = new Float32Array(buf.length / 2);
+        for (let i = 0; i < floatData.length; i++) {
+          const val = buf[i * 2] | (buf[i * 2 + 1] << 8);
+          floatData[i] = val < 0x8000 ? val / 0x8000 : (val - 0x10000) / 0x8000;
+        }
+
+        const audioBuffer = window.audioContext.createBuffer(1, floatData.length, 44100);
+        audioBuffer.getChannelData(0).set(floatData);
+
+        audioBufferQueue.push(audioBuffer);
+        if (!isPlayingAudio) playAudioQueue();
+      });
+    };
+
+    function playAudioQueue() {
+      if (audioBufferQueue.length === 0) {
+        isPlayingAudio = false;
+        return;
+      }
+      isPlayingAudio = true;
+      const source = window.audioContext.createBufferSource();
+      source.buffer = audioBufferQueue.shift();
+      source.connect(receiverGainNode);
+      source.start();
+      source.onended = playAudioQueue;
+    }
+
+    muteBtn.onclick = () => {
+      const node = senderGainNode || receiverGainNode;
+      if (node) {
+        node.gain.value = node.gain.value > 0 ? 0 : 1;
+        muteBtn.textContent = node.gain.value === 0 ? "Unmute" : "Mute";
+        volDisplay.textContent = Math.round(node.gain.value * 100) + "%";
+      }
+    };
+
+    volUpBtn.onclick = () => {
+      const node = senderGainNode || receiverGainNode;
+      if (node) {
+        node.gain.value = Math.min(1, node.gain.value + 0.1);
+        volDisplay.textContent = Math.round(node.gain.value * 100) + "%";
+      }
+    };
+
+    volDownBtn.onclick = () => {
+      const node = senderGainNode || receiverGainNode;
+      if (node) {
+        node.gain.value = Math.max(0, node.gain.value - 0.1);
+        volDisplay.textContent = Math.round(node.gain.value * 100) + "%";
+      }
+    };
+
+    document.getElementById('fullscreenBtn').onclick = () => {
+      const docEl = document.documentElement;
+      if (docEl.requestFullscreen) docEl.requestFullscreen();
+      else if (docEl.webkitRequestFullscreen) docEl.webkitRequestFullscreen();
+      else if (docEl.msRequestFullscreen) docEl.msRequestFullscreen();
+    };
+
+    document.addEventListener("fullscreenchange", () => {
+      controls.classList.toggle("hidden", !!document.fullscreenElement);
+    });
+  </script>
+</body>
+</html>
+YPE html> 
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
