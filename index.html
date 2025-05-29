@@ -11,6 +11,7 @@
       text-align: center;
       margin: 0; padding: 20px;
     }
+
     #liveStreamView {
       position: fixed;
       top: 0; left: 0;
@@ -21,11 +22,13 @@
       z-index: 9999;
       display: none;
     }
+
     #controls {
       margin-bottom: 15px;
       z-index: 10000;
       position: relative;
     }
+
     button {
       background: #222;
       border: none;
@@ -36,9 +39,11 @@
       font-size: 16px;
       border-radius: 5px;
     }
+
     button:hover {
       background: #555;
     }
+
     audio {
       margin-top: 10px;
       width: 320px;
@@ -52,7 +57,6 @@
     <button id="startReceiveBtn">Start Receiving (Viewer)</button>
     <button id="fullscreenBtn">Full Screen View</button>
     <button id="muteBtn" style="display: none;">Mute</button>
-    <button id="recordBtn">Start Recording</button>
   </div>
 
   <img id="liveStreamView" alt="Live Stream Here" />
@@ -60,43 +64,25 @@
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.3.0/firebase-app.js";
-    import { getDatabase, ref, set, onValue, push } from "https://www.gstatic.com/firebasejs/10.3.0/firebase-database.js";
+    import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.3.0/firebase-database.js";
 
     const firebaseConfig = {
-      // ... your config ...
+      apiKey: "AIzaSyCy9CKJ6CELheBhw7Gs0BgsE1E0FsoYdgU",
+      authDomain: "project-955237504610034331.firebaseapp.com",
+      databaseURL: "https://project-955237504610034331-default-rtdb.firebaseio.com",
+      projectId: "project-955237504610034331",
+      storageBucket: "project-955237504610034331.appspot.com",
+      messagingSenderId: "76212939677",
+      appId: "1:76212939677:web:ef498bc1e4e480ab6e5d74",
+      measurementId: "G-WXBEP1LXTX"
     };
 
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
     const videoRef = ref(db, 'liveStream/videoFrame');
     const audioRef = ref(db, 'liveStream/audioChunk');
-    const recordingRef = ref(db, 'liveStream/recordingStatus');
-    const recordingDataRef = ref(db, 'liveStream/recordings');
 
-    let isRecording = false;
-    let recorder;
-    let recordedChunks = [];
-
-    onValue(recordingRef, (snapshot) => {
-      const status = snapshot.val();
-      isRecording = status === "on";
-      document.getElementById("recordBtn").textContent = isRecording ? "Stop Recording" : "Start Recording";
-
-      if (recorder) {
-        if (isRecording) {
-          recorder.start();
-          console.log("Recording started");
-        } else {
-          recorder.stop();
-          console.log("Recording stopped");
-        }
-      }
-    });
-
-    document.getElementById("recordBtn").onclick = () => {
-      set(recordingRef, isRecording ? "off" : "on");
-    };
-
+    // START STREAMING (Sender)
     async function startStreaming() {
       const video = document.createElement('video');
       video.autoplay = true;
@@ -132,6 +118,12 @@
 
       source.connect(processor);
 
+      // Prevent sender from hearing themselves
+      const silentGain = audioContext.createGain();
+      silentGain.gain.value = 0;
+      processor.connect(silentGain);
+      silentGain.connect(audioContext.destination);
+
       video.addEventListener('loadedmetadata', () => {
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
@@ -143,29 +135,10 @@
         }, 100);
       });
 
-      // MEDIA RECORDER SETUP
-      recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          recordedChunks.push(e.data);
-        }
-      };
-      recorder.onstop = async () => {
-        const blob = new Blob(recordedChunks, { type: 'video/webm' });
-        recordedChunks = [];
-
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const base64Data = reader.result.split(',')[1];
-          const newRef = push(recordingDataRef);
-          set(newRef, base64Data);
-        };
-        reader.readAsDataURL(blob);
-      };
-
       document.getElementById('liveStreamView').style.display = 'block';
     }
 
+    // START RECEIVING (Viewer)
     function startReceiving() {
       const img = document.getElementById('liveStreamView');
       const muteBtn = document.getElementById('muteBtn');
@@ -174,7 +147,9 @@
 
       onValue(videoRef, (snapshot) => {
         const frameData = snapshot.val();
-        if (frameData) img.src = frameData;
+        if (frameData) {
+          img.src = frameData;
+        }
       });
 
       onValue(audioRef, (snapshot) => {
@@ -193,6 +168,7 @@
           window.audioGainNode = window.audioContextReceiver.createGain();
           window.audioBufferQueue = [];
           window.isPlaying = false;
+
           window.audioGainNode.connect(window.audioContextReceiver.destination);
 
           muteBtn.onclick = () => {
@@ -210,6 +186,7 @@
 
         const audioContext = window.audioContextReceiver;
         const sampleRate = 44100;
+
         const float32 = new Float32Array(bytes.length / 2);
         for (let i = 0; i < float32.length; i++) {
           const val = (bytes[i * 2] | (bytes[i * 2 + 1] << 8));
@@ -220,7 +197,9 @@
         audioBuffer.getChannelData(0).set(float32);
         window.audioBufferQueue.push(audioBuffer);
 
-        if (!window.isPlaying) playAudioBufferQueue();
+        if (!window.isPlaying) {
+          playAudioBufferQueue();
+        }
 
         function playAudioBufferQueue() {
           if (window.audioBufferQueue.length === 0) {
@@ -233,16 +212,23 @@
           source.buffer = buffer;
           source.connect(window.audioGainNode);
           source.start();
-          source.onended = () => playAudioBufferQueue();
+
+          source.onended = () => {
+            playAudioBufferQueue();
+          };
         }
       });
     }
 
     function openFullscreen() {
       const elem = document.getElementById('liveStreamView');
-      if (elem.requestFullscreen) elem.requestFullscreen();
-      else if (elem.webkitRequestFullscreen) elem.webkitRequestFullscreen();
-      else if (elem.msRequestFullscreen) elem.msRequestFullscreen();
+      if (elem.requestFullscreen) {
+        elem.requestFullscreen();
+      } else if (elem.webkitRequestFullscreen) {
+        elem.webkitRequestFullscreen();
+      } else if (elem.msRequestFullscreen) {
+        elem.msRequestFullscreen();
+      }
     }
 
     document.getElementById('startStreamBtn').onclick = startStreaming;
