@@ -120,10 +120,6 @@
     const volDisplay = document.getElementById('volDisplay');
 
     let senderGainNode = null;
-    let audioContextReceiver = null;
-    let audioGainNode = null;
-    let audioBufferQueue = [];
-    let isPlaying = false;
 
     async function startStreaming() {
       const video = document.createElement('video');
@@ -134,6 +130,8 @@
 
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
+      canvas.width = 640;
+      canvas.height = 480;
 
       const audioContext = new AudioContext();
       const source = audioContext.createMediaStreamSource(stream);
@@ -155,18 +153,27 @@
           view.setInt16(i * 2, s, true);
         }
         const base64Audio = btoa(String.fromCharCode(...new Uint8Array(buffer)));
-        set(audioRef, base64Audio);
+        try {
+          set(audioRef, base64Audio);
+        } catch (err) {
+          console.error("Failed to send audio:", err);
+        }
       };
 
       video.addEventListener('loadedmetadata', () => {
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
-        setInterval(() => {
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          const frameData = canvas.toDataURL('image/jpeg', 0.5);
-          set(videoRef, frameData);
-        }, 100);
       });
+
+      setInterval(() => {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const frameData = canvas.toDataURL('image/jpeg', 0.5);
+        try {
+          set(videoRef, frameData);
+        } catch (err) {
+          console.error("Failed to send video:", err);
+        }
+      }, 100);
 
       liveStreamView.style.display = 'block';
     }
@@ -186,11 +193,15 @@
         const bytes = new Uint8Array(binary.length);
         for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
 
-        if (!audioContextReceiver) {
-          audioContextReceiver = new AudioContext();
-          audioGainNode = audioContextReceiver.createGain();
-          audioGainNode.gain.value = 1;
-          audioGainNode.connect(audioContextReceiver.destination);
+        if (!window.audioContextReceiver) {
+          const ctx = new AudioContext();
+          const gain = ctx.createGain();
+          gain.gain.value = 1;
+          gain.connect(ctx.destination);
+          window.audioContextReceiver = ctx;
+          window.audioGainNode = gain;
+          window.audioBufferQueue = [];
+          window.isPlaying = false;
         }
 
         const float32 = new Float32Array(bytes.length / 2);
@@ -199,33 +210,29 @@
           float32[i] = val < 0x8000 ? val / 0x8000 : (val - 0x10000) / 0x8000;
         }
 
-        const buffer = audioContextReceiver.createBuffer(1, float32.length, 44100);
+        const buffer = window.audioContextReceiver.createBuffer(1, float32.length, 44100);
         buffer.getChannelData(0).set(float32);
-        audioBufferQueue.push(buffer);
+        window.audioBufferQueue.push(buffer);
 
-        if (!isPlaying) playAudioBufferQueue();
+        if (!window.isPlaying) playAudioBufferQueue();
 
         function playAudioBufferQueue() {
-          if (!audioBufferQueue.length) {
-            isPlaying = false;
+          if (!window.audioBufferQueue.length) {
+            window.isPlaying = false;
             return;
           }
-          isPlaying = true;
-          const source = audioContextReceiver.createBufferSource();
-          source.buffer = audioBufferQueue.shift();
-          source.connect(audioGainNode);
+          window.isPlaying = true;
+          const source = window.audioContextReceiver.createBufferSource();
+          source.buffer = window.audioBufferQueue.shift();
+          source.connect(window.audioGainNode);
           source.start();
           source.onended = playAudioBufferQueue;
         }
       });
     }
 
-    function getCurrentGainNode() {
-      return senderGainNode || audioGainNode;
-    }
-
     muteBtn.onclick = () => {
-      const node = getCurrentGainNode();
+      const node = senderGainNode || window.audioGainNode;
       if (!node) return;
       node.gain.value = node.gain.value > 0 ? 0 : 1;
       muteBtn.textContent = node.gain.value > 0 ? "Mute" : "Unmute";
@@ -233,14 +240,14 @@
     };
 
     volUpBtn.onclick = () => {
-      const node = getCurrentGainNode();
+      const node = senderGainNode || window.audioGainNode;
       if (!node) return;
       node.gain.value = Math.min(1, node.gain.value + 0.1);
       volDisplay.textContent = Math.round(node.gain.value * 100) + "%";
     };
 
     volDownBtn.onclick = () => {
-      const node = getCurrentGainNode();
+      const node = senderGainNode || window.audioGainNode;
       if (!node) return;
       node.gain.value = Math.max(0, node.gain.value - 0.1);
       volDisplay.textContent = Math.round(node.gain.value * 100) + "%";
