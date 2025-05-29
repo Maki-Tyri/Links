@@ -183,7 +183,7 @@
       }
       drawFrame();
 
-      // Audio setup
+      // Audio setup with lower buffer size (512 instead of 2048)
       const audioCtx = new AudioContext();
       const source = audioCtx.createMediaStreamSource(stream);
       senderGainNode = audioCtx.createGain();
@@ -192,7 +192,8 @@
 
       const dest = audioCtx.createMediaStreamDestination();
       senderGainNode.connect(dest);
-      const processor = audioCtx.createScriptProcessor(2048, 1, 1);
+      // Using a smaller buffer size for lower latency
+      const processor = audioCtx.createScriptProcessor(512, 1, 1);
       senderGainNode.connect(processor);
       processor.connect(dest);
 
@@ -230,7 +231,9 @@
         if (!snap.exists()) return;
         const bin = atob(snap.val());
         const buf = new Uint8Array(bin.length);
-        for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+        for (let i = 0; i < bin.length; i++) {
+          buf[i] = bin.charCodeAt(i);
+        }
 
         if (!window.audioContext) {
           window.audioContext = new AudioContext();
@@ -248,6 +251,11 @@
         const audioBuffer = window.audioContext.createBuffer(1, floatData.length, 44100);
         audioBuffer.getChannelData(0).set(floatData);
 
+        // To help reduce delay, trim the queue if it grows too large
+        if (audioBufferQueue.length > 3) {
+          audioBufferQueue.splice(0, audioBufferQueue.length - 3);
+        }
+
         audioBufferQueue.push(audioBuffer);
         if (!isPlayingAudio) playAudioQueue();
       });
@@ -262,7 +270,7 @@
       const source = window.audioContext.createBufferSource();
       source.buffer = audioBufferQueue.shift();
       source.connect(receiverGainNode);
-      source.start();
+      source.start(0);
       source.onended = playAudioQueue;
     }
 
