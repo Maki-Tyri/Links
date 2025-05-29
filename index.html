@@ -9,7 +9,7 @@
       background: #111;
       color: white;
       margin: 0;
-      padding: 0;
+      padding: 20px;
     }
 
     #liveStreamView {
@@ -20,7 +20,7 @@
       height: 100vh;
       object-fit: contain;
       background: black;
-      z-index: 1;
+      z-index: 9999;
       display: none;
     }
 
@@ -32,7 +32,7 @@
       height: 120px;
       object-fit: cover;
       border: 2px solid white;
-      z-index: 2;
+      z-index: 9999;
     }
 
     .controls {
@@ -40,7 +40,7 @@
       bottom: 20px;
       left: 50%;
       transform: translateX(-50%);
-      z-index: 3;
+      z-index: 10000;
       display: flex;
       gap: 10px;
       background: rgba(0, 0, 0, 0.7);
@@ -76,7 +76,7 @@
   </style>
 </head>
 <body>
-  <video id="localVideo" autoplay muted playsinline></video>
+  <video id="localVideo" autoplay muted></video>
   <img id="liveStreamView" alt="Live Stream Here" />
 
   <div class="controls" id="controls">
@@ -119,46 +119,46 @@
     const volDownBtn = document.getElementById('volDownBtn');
     const volDisplay = document.getElementById('volDisplay');
 
-    let gainNode = null;
+    let viewerGainNode = null;
 
     async function startStreaming() {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      const video = document.createElement('video');
+      video.autoplay = true;
+      let stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      video.srcObject = stream;
       localVideo.srcObject = stream;
-
-      const videoTrack = document.createElement('video');
-      videoTrack.srcObject = stream;
-      videoTrack.play();
 
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
 
       const audioContext = new AudioContext();
       const source = audioContext.createMediaStreamSource(stream);
-      gainNode = audioContext.createGain();
+      const gainNode = audioContext.createGain();
       gainNode.gain.value = 1;
       source.connect(gainNode);
 
       const processor = audioContext.createScriptProcessor(2048, 1, 1);
       gainNode.connect(processor);
-      processor.connect(audioContext.destination);
+      processor.connect(audioContext.createMediaStreamDestination());
 
       processor.onaudioprocess = e => {
-        const input = e.inputBuffer.getChannelData(0);
-        const buffer = new ArrayBuffer(input.length * 2);
+        const inputData = e.inputBuffer.getChannelData(0);
+        const buffer = new ArrayBuffer(inputData.length * 2);
         const view = new DataView(buffer);
-        for (let i = 0; i < input.length; i++) {
-          const val = Math.max(-1, Math.min(1, input[i]));
-          view.setInt16(i * 2, val < 0 ? val * 0x8000 : val * 0x7FFF, true);
+        for (let i = 0; i < inputData.length; i++) {
+          let s = Math.max(-1, Math.min(1, inputData[i]));
+          s = s < 0 ? s * 0x8000 : s * 0x7FFF;
+          view.setInt16(i * 2, s, true);
         }
         const base64Audio = btoa(String.fromCharCode(...new Uint8Array(buffer)));
         set(audioRef, base64Audio);
       };
 
-      videoTrack.addEventListener('loadedmetadata', () => {
-        canvas.width = videoTrack.videoWidth;
-        canvas.height = videoTrack.videoHeight;
+      video.addEventListener('loadedmetadata', () => {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
         setInterval(() => {
-          ctx.drawImage(videoTrack, 0, 0, canvas.width, canvas.height);
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
           const frameData = canvas.toDataURL('image/jpeg', 0.5);
           set(videoRef, frameData);
         }, 100);
@@ -170,15 +170,15 @@
     function startReceiving() {
       liveStreamView.style.display = 'block';
       onValue(videoRef, snapshot => {
-        const data = snapshot.val();
-        if (data) liveStreamView.src = data;
+        const frameData = snapshot.val();
+        if (frameData) liveStreamView.src = frameData;
       });
 
       onValue(audioRef, snapshot => {
-        const base64 = snapshot.val();
-        if (!base64) return;
+        const base64Audio = snapshot.val();
+        if (!base64Audio) return;
 
-        const binary = atob(base64);
+        const binary = atob(base64Audio);
         const bytes = new Uint8Array(binary.length);
         for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
 
@@ -203,25 +203,25 @@
         buffer.getChannelData(0).set(float32);
         window.audioBufferQueue.push(buffer);
 
-        if (!window.isPlaying) playAudio();
+        if (!window.isPlaying) playAudioBufferQueue();
 
-        function playAudio() {
+        function playAudioBufferQueue() {
           if (!window.audioBufferQueue.length) {
             window.isPlaying = false;
             return;
           }
           window.isPlaying = true;
-          const src = window.audioContextReceiver.createBufferSource();
-          src.buffer = window.audioBufferQueue.shift();
-          src.connect(window.audioGainNode);
-          src.start();
-          src.onended = playAudio;
+          const source = window.audioContextReceiver.createBufferSource();
+          source.buffer = window.audioBufferQueue.shift();
+          source.connect(window.audioGainNode);
+          source.start();
+          source.onended = playAudioBufferQueue;
         }
       });
     }
 
     muteBtn.onclick = () => {
-      const node = gainNode || window.audioGainNode;
+      const node = window.audioGainNode;
       if (!node) return;
       node.gain.value = node.gain.value > 0 ? 0 : 1;
       muteBtn.textContent = node.gain.value > 0 ? "Mute" : "Unmute";
@@ -229,24 +229,24 @@
     };
 
     volUpBtn.onclick = () => {
-      const node = gainNode || window.audioGainNode;
+      const node = window.audioGainNode;
       if (!node) return;
       node.gain.value = Math.min(1, node.gain.value + 0.1);
       volDisplay.textContent = Math.round(node.gain.value * 100) + "%";
     };
 
     volDownBtn.onclick = () => {
-      const node = gainNode || window.audioGainNode;
+      const node = window.audioGainNode;
       if (!node) return;
       node.gain.value = Math.max(0, node.gain.value - 0.1);
       volDisplay.textContent = Math.round(node.gain.value * 100) + "%";
     };
 
     function openFullscreen() {
-      const el = document.documentElement;
-      if (el.requestFullscreen) el.requestFullscreen();
-      else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
-      else if (el.msRequestFullscreen) el.msRequestFullscreen();
+      const elem = document.documentElement;
+      if (elem.requestFullscreen) elem.requestFullscreen();
+      else if (elem.webkitRequestFullscreen) elem.webkitRequestFullscreen();
+      else if (elem.msRequestFullscreen) elem.msRequestFullscreen();
     }
 
     document.getElementById('startStreamBtn').onclick = startStreaming;
