@@ -52,6 +52,20 @@
       z-index: 10001;
       border: 2px solid white;
     }
+
+    #senderVolumeControls {
+      position: fixed;
+      bottom: 10px;
+      right: 220px;
+      z-index: 10001;
+      background: rgba(0,0,0,0.5);
+      padding: 10px;
+      border-radius: 8px;
+    }
+
+    #senderVolumeControls input[type="range"] {
+      width: 100px;
+    }
   </style>
 </head>
 <body>
@@ -60,10 +74,17 @@
     <button id="startStreamBtn">Start Streaming (Sender)</button>
     <button id="startReceiveBtn">Start Receiving (Viewer)</button>
     <button id="fullscreenBtn">Full Screen View</button>
-    <button id="muteBtn" style="display: none;">Mute</button>
+    <button id="muteBtn" style="display: none;">Mute Viewer</button>
+  </div>
+
+  <div id="senderVolumeControls" style="display: none;">
+    <label style="font-size: 14px;">Sender Volume:</label><br>
+    <input id="volumeSlider" type="range" min="0" max="1" step="0.01" value="1">
+    <button id="senderMuteBtn">Mute</button>
   </div>
 
   <img id="liveStreamView" alt="Live Stream Here" />
+
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.3.0/firebase-app.js";
     import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.3.0/firebase-database.js";
@@ -84,12 +105,18 @@
     const videoRef = ref(db, 'liveStream/videoFrame');
     const audioRef = ref(db, 'liveStream/audioChunk');
 
+    let preview;
+
     async function startStreaming() {
-      const preview = document.createElement('video');
+      preview = document.createElement('video');
       preview.autoplay = true;
-      preview.muted = true;
+      preview.muted = false;
+      preview.volume = 1;
       preview.className = 'preview';
       document.body.appendChild(preview);
+
+      const volControls = document.getElementById('senderVolumeControls');
+      volControls.style.display = 'block';
 
       let stream;
       try {
@@ -123,7 +150,7 @@
       };
 
       source.connect(processor);
-      processor.connect(audioCtx.destination); // required to keep processor running
+      processor.connect(audioCtx.destination);
 
       const video = document.createElement('video');
       video.srcObject = stream;
@@ -175,7 +202,7 @@
 
           muteBtn.onclick = () => {
             gain.gain.value = gain.gain.value > 0 ? 0 : 1;
-            muteBtn.textContent = gain.gain.value > 0 ? 'Mute' : 'Unmute';
+            muteBtn.textContent = gain.gain.value > 0 ? 'Mute Viewer' : 'Unmute Viewer';
           };
         }
 
@@ -223,6 +250,17 @@
     document.getElementById('startStreamBtn').onclick = startStreaming;
     document.getElementById('startReceiveBtn').onclick = startReceiving;
     document.getElementById('fullscreenBtn').onclick = openFullscreen;
+
+    document.getElementById('volumeSlider').addEventListener('input', (e) => {
+      if (preview) preview.volume = parseFloat(e.target.value);
+    });
+
+    document.getElementById('senderMuteBtn').onclick = () => {
+      if (preview) {
+        preview.muted = !preview.muted;
+        document.getElementById('senderMuteBtn').textContent = preview.muted ? 'Unmute' : 'Mute';
+      }
+    };
   </script>
 </body>
 </html>
