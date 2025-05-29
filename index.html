@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Live Stream</title>
+  <title>EYE</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     body {
@@ -92,7 +92,7 @@
     <button id="fullscreenBtn">Fullscreen</button>
     <button id="muteBtn">Mute</button>
     <button id="volDownBtn">-</button>
-    <div class="volume-display" id="volDisplay">100%</div>
+    <div class="volume-display" id="volDisplay">200%</div>
     <button id="volUpBtn">+</button>
   </div>
 
@@ -129,7 +129,7 @@
     let audioBufferQueue = [];
     let isPlayingAudio = false;
 
-    let currentFacingMode = "user"; // default camera
+    let currentFacingMode = "user";
     let currentStream = null;
     let canvas = null;
     let ctx = null;
@@ -137,7 +137,6 @@
     let drawFrameId = null;
 
     async function startStream(facingMode = "user") {
-      // Stop existing stream tracks and cancel animation frame if any
       if (currentStream) {
         currentStream.getTracks().forEach(track => track.stop());
         currentStream = null;
@@ -156,7 +155,6 @@
         ctx = canvas.getContext('2d');
       }
 
-      // Get media stream with facingMode
       const constraints = {
         video: { facingMode },
         audio: true
@@ -165,14 +163,12 @@
       currentStream = stream;
       localVideo.srcObject = stream;
 
-      // Create offscreen video element to draw frames
       videoElement = document.createElement('video');
       videoElement.srcObject = stream;
       videoElement.muted = true;
       videoElement.playsInline = true;
       await videoElement.play();
 
-      // Set canvas size after metadata loaded
       canvas.width = videoElement.videoWidth;
       canvas.height = videoElement.videoHeight;
 
@@ -183,7 +179,6 @@
       }
       drawFrame();
 
-      // Audio setup with lower buffer size (512 instead of 2048)
       const audioCtx = new AudioContext();
       const source = audioCtx.createMediaStreamSource(stream);
       senderGainNode = audioCtx.createGain();
@@ -192,7 +187,7 @@
 
       const dest = audioCtx.createMediaStreamDestination();
       senderGainNode.connect(dest);
-      // Using a smaller buffer size for lower latency
+
       const processor = audioCtx.createScriptProcessor(512, 1, 1);
       senderGainNode.connect(processor);
       processor.connect(dest);
@@ -251,9 +246,8 @@
         const audioBuffer = window.audioContext.createBuffer(1, floatData.length, 44100);
         audioBuffer.getChannelData(0).set(floatData);
 
-        // To help reduce delay, trim the queue if it grows too large
-        if (audioBufferQueue.length > 3) {
-          audioBufferQueue.splice(0, audioBufferQueue.length - 3);
+        if (audioBufferQueue.length > 10) {
+          audioBufferQueue.splice(0, audioBufferQueue.length - 10); // trim old
         }
 
         audioBufferQueue.push(audioBuffer);
@@ -262,10 +256,15 @@
     };
 
     function playAudioQueue() {
+      if (audioBufferQueue.length > 10) {
+        audioBufferQueue.splice(0, audioBufferQueue.length - 10); // keep recent
+      }
+
       if (audioBufferQueue.length === 0) {
         isPlayingAudio = false;
         return;
       }
+
       isPlayingAudio = true;
       const source = window.audioContext.createBufferSource();
       source.buffer = audioBufferQueue.shift();
