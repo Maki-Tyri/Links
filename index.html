@@ -82,15 +82,19 @@
     const videoRef = ref(db, 'liveStream/videoFrame');
     const audioRef = ref(db, 'liveStream/audioChunk');
 
-    // START STREAMING (Sender)
     async function startStreaming() {
       const video = document.createElement('video');
       video.autoplay = true;
+      video.muted = true; // ✅ Prevent sender from hearing their own audio
 
       let stream;
       try {
         stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         video.srcObject = stream;
+
+        stream.getAudioTracks().forEach(track => {
+          track.enabled = true;
+        });
       } catch (err) {
         alert("Error accessing camera/mic: " + err.message);
         return;
@@ -117,12 +121,8 @@
       };
 
       source.connect(processor);
-
-      // Prevent sender from hearing themselves
-      const silentGain = audioContext.createGain();
-      silentGain.gain.value = 0;
-      processor.connect(silentGain);
-      silentGain.connect(audioContext.destination);
+      // Not connecting to destination so sender won't hear themselves
+      // processor.connect(audioContext.destination);
 
       video.addEventListener('loadedmetadata', () => {
         canvas.width = video.videoWidth;
@@ -138,7 +138,6 @@
       document.getElementById('liveStreamView').style.display = 'block';
     }
 
-    // START RECEIVING (Viewer)
     function startReceiving() {
       const img = document.getElementById('liveStreamView');
       const muteBtn = document.getElementById('muteBtn');
