@@ -34,9 +34,15 @@
       background: #444;
     }
 
+    #volumeDisplay {
+      display: inline-block;
+      min-width: 60px;
+    }
+
     #liveStreamView {
       position: fixed;
-      top: 0; left: 0;
+      top: 0;
+      left: 0;
       width: 100vw;
       height: 100vh;
       object-fit: contain;
@@ -78,6 +84,7 @@
     <button id="muteBtn">Mute</button>
     <button id="volumeDownBtn">➖ Volume</button>
     <button id="volumeUpBtn">➕ Volume</button>
+    <span id="volumeDisplay">100%</span>
   </div>
 
   <img id="liveStreamView" alt="Live Stream Here" />
@@ -108,30 +115,36 @@
     const muteBtn = document.getElementById('muteBtn');
     const volumeUpBtn = document.getElementById('volumeUpBtn');
     const volumeDownBtn = document.getElementById('volumeDownBtn');
+    const volumeDisplay = document.getElementById('volumeDisplay');
     const localPreview = document.getElementById('localPreview');
 
     let currentVolume = 1;
     const volumeStep = 0.1;
 
+    function updateVolumeDisplay() {
+      volumeDisplay.textContent = Math.round(currentVolume * 100) + '%';
+    }
+
     function setVolume(level) {
       currentVolume = Math.min(1, Math.max(0, level));
       audioElement.volume = currentVolume;
+      updateVolumeDisplay();
+
+      if (window.audioGainNode) {
+        window.audioGainNode.gain.value = currentVolume;
+      }
     }
 
     volumeUpBtn.onclick = () => setVolume(currentVolume + volumeStep);
     volumeDownBtn.onclick = () => setVolume(currentVolume - volumeStep);
 
     muteBtn.onclick = () => {
-      if (audioElement.muted) {
-        audioElement.muted = false;
-        muteBtn.textContent = "Mute";
-      } else {
-        audioElement.muted = true;
-        muteBtn.textContent = "Unmute";
-      }
+      audioElement.muted = !audioElement.muted;
+      muteBtn.textContent = audioElement.muted ? "Unmute" : "Mute";
     };
 
-    // START STREAMING
+    updateVolumeDisplay();
+
     async function startStreaming() {
       let stream;
       try {
@@ -184,7 +197,6 @@
       document.getElementById('liveStreamView').style.display = 'block';
     }
 
-    // START RECEIVING
     function startReceiving() {
       const img = document.getElementById('liveStreamView');
       img.style.display = 'block';
