@@ -85,7 +85,15 @@
     async function startStreaming() {
       const video = document.createElement('video');
       video.autoplay = true;
-      video.muted = true; // ✅ Prevent sender from hearing their own audio
+      video.muted = true; // Prevent sender from hearing their own audio
+
+      // Show local camera preview bottom-right corner
+      video.style.position = "fixed";
+      video.style.bottom = "10px";
+      video.style.right = "10px";
+      video.style.width = "200px";
+      video.style.zIndex = 10000;
+      document.body.appendChild(video);
 
       let stream;
       try {
@@ -121,8 +129,7 @@
       };
 
       source.connect(processor);
-      // Not connecting to destination so sender won't hear themselves
-      // processor.connect(audioContext.destination);
+      // processor.connect(audioContext.destination); // Not connected to avoid sender hearing audio
 
       video.addEventListener('loadedmetadata', () => {
         canvas.width = video.videoWidth;
