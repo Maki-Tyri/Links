@@ -8,75 +8,83 @@
       font-family: Arial, sans-serif;
       background: #111;
       color: white;
-      text-align: center;
       margin: 0;
-      padding: 20px;
-    }
-
-    #liveStreamView {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      object-fit: contain;
-      background: black;
-      z-index: 1;
-      display: none;
-    }
-
-    #localPreview {
-      position: fixed;
-      bottom: 10px;
-      right: 10px;
-      width: 200px;
-      height: 150px;
-      background: black;
-      z-index: 2;
-      display: none;
+      padding: 0;
+      overflow: hidden;
     }
 
     #controls {
-      z-index: 3;
-      position: relative;
-      margin-bottom: 15px;
+      position: fixed;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 10000;
+      background: rgba(0, 0, 0, 0.7);
+      padding: 10px 20px;
+      border-radius: 10px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
     }
 
-    button, input[type=range] {
+    button {
       background: #222;
       border: none;
       color: white;
-      padding: 10px;
-      margin: 5px;
-      font-size: 16px;
-      border-radius: 5px;
+      padding: 10px 15px;
       cursor: pointer;
+      font-size: 14px;
+      border-radius: 5px;
     }
 
     button:hover {
       background: #555;
     }
 
-    input[type=range] {
-      width: 150px;
+    #liveStreamView, #localPreview {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100vw;
+      height: 100vh;
+      object-fit: contain;
+      background: black;
+      display: none;
+      z-index: 1;
+    }
+
+    #localPreview {
+      width: 240px;
+      height: 180px;
+      top: auto;
+      bottom: 10px;
+      left: 10px;
+      z-index: 9999;
+      border: 2px solid white;
+      display: none;
     }
 
     .hidden {
       display: none !important;
     }
+
+    ::-webkit-media-controls {
+      display: none !important;
+    }
   </style>
 </head>
 <body>
+
   <div id="controls">
     <button id="startStreamBtn">Start Streaming (Sender)</button>
     <button id="startReceiveBtn">Start Receiving (Viewer)</button>
     <button id="fullscreenBtn">Full Screen View</button>
     <button id="muteBtn">Mute</button>
-    <input type="range" id="volumeSlider" min="0" max="1" step="0.01" value="1" />
+    <button id="volumeBtn">🔊 Volume</button>
   </div>
 
-  <img id="liveStreamView" alt="Live Stream Here" />
-  <video id="localPreview" autoplay muted playsinline></video>
+  <video id="localPreview" autoplay muted></video>
+  <img id="liveStreamView" alt="Live Stream View" />
+  <audio id="liveAudio" autoplay></audio>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.3.0/firebase-app.js";
@@ -98,29 +106,29 @@
     const videoRef = ref(db, 'liveStream/videoFrame');
     const audioRef = ref(db, 'liveStream/audioChunk');
 
-    let audioContextSender;
-    let senderGain;
+    const localPreview = document.getElementById('localPreview');
+    const liveView = document.getElementById('liveStreamView');
+    const audioElement = document.getElementById('liveAudio');
+    const muteBtn = document.getElementById('muteBtn');
+    const volumeBtn = document.getElementById('volumeBtn');
+    let isMuted = false;
 
+    // START STREAMING (Sender)
     async function startStreaming() {
-      const video = document.getElementById('localPreview');
-      video.style.display = 'block';
+      const video = document.createElement('video');
+      video.autoplay = true;
 
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       video.srcObject = stream;
+      localPreview.srcObject = stream;
+      localPreview.style.display = 'block';
 
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
 
-      audioContextSender = new AudioContext();
-      const source = audioContextSender.createMediaStreamSource(stream);
-      const processor = audioContextSender.createScriptProcessor(4096, 1, 1);
-      senderGain = audioContextSender.createGain();
-      senderGain.gain.value = 1;
-
-      source.connect(processor);
-      processor.connect(senderGain); // don't connect to destination
-      senderGain.connect(audioContextSender.destination); // monitor volume change
-      senderGain.disconnect(); // avoid hearing self
+      const audioContext = new AudioContext();
+      const source = audioContext.createMediaStreamSource(stream);
+      const processor = audioContext.createScriptProcessor(4096, 1, 1);
 
       processor.onaudioprocess = (e) => {
         const inputData = e.inputBuffer.getChannelData(0);
@@ -135,27 +143,29 @@
         set(audioRef, base64Audio);
       };
 
+      source.connect(processor);
+      processor.connect(audioContext.destination);
+
       video.addEventListener('loadedmetadata', () => {
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
-
         setInterval(() => {
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
           const frameData = canvas.toDataURL('image/jpeg', 0.5);
           set(videoRef, frameData);
         }, 100);
       });
-
-      document.getElementById('liveStreamView').style.display = 'block';
     }
 
+    // START RECEIVING (Viewer)
     function startReceiving() {
-      const img = document.getElementById('liveStreamView');
-      img.style.display = 'block';
+      liveView.style.display = 'block';
 
       onValue(videoRef, (snapshot) => {
         const frameData = snapshot.val();
-        if (frameData) img.src = frameData;
+        if (frameData) {
+          liveView.src = frameData;
+        }
       });
 
       onValue(audioRef, (snapshot) => {
@@ -163,30 +173,10 @@
         if (!base64Audio) return;
 
         const binaryString = atob(base64Audio);
-        const len = binaryString.length;
-        const bytes = new Uint8Array(len);
-        for (let i = 0; i < len; i++) {
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
           bytes[i] = binaryString.charCodeAt(i);
         }
-
-        if (!window.audioContextReceiver) {
-          window.audioContextReceiver = new AudioContext();
-          window.audioGainNode = window.audioContextReceiver.createGain();
-          window.audioGainNode.gain.value = 1;
-          window.audioBufferQueue = [];
-          window.isPlaying = false;
-
-          window.audioGainNode.connect(window.audioContextReceiver.destination);
-
-          document.addEventListener("visibilitychange", () => {
-            if (document.visibilityState === "visible" && window.audioContextReceiver.state === "suspended") {
-              window.audioContextReceiver.resume();
-            }
-          });
-        }
-
-        const audioContext = window.audioContextReceiver;
-        const sampleRate = 44100;
 
         const float32 = new Float32Array(bytes.length / 2);
         for (let i = 0; i < float32.length; i++) {
@@ -194,51 +184,31 @@
           float32[i] = val < 0x8000 ? val / 0x8000 : (val - 0x10000) / 0x8000;
         }
 
-        const audioBuffer = audioContext.createBuffer(1, float32.length, sampleRate);
+        const context = new AudioContext();
+        const audioBuffer = context.createBuffer(1, float32.length, 44100);
         audioBuffer.getChannelData(0).set(float32);
-        window.audioBufferQueue.push(audioBuffer);
 
-        if (!window.isPlaying) {
-          playAudioBufferQueue();
-        }
-
-        function playAudioBufferQueue() {
-          if (window.audioBufferQueue.length === 0) {
-            window.isPlaying = false;
-            return;
-          }
-          window.isPlaying = true;
-          const buffer = window.audioBufferQueue.shift();
-          const source = audioContext.createBufferSource();
-          source.buffer = buffer;
-          source.connect(window.audioGainNode);
-          source.start();
-          source.onended = playAudioBufferQueue;
-        }
+        const source = context.createBufferSource();
+        source.buffer = audioBuffer;
+        const gainNode = context.createGain();
+        gainNode.gain.value = isMuted ? 0 : 1;
+        source.connect(gainNode).connect(context.destination);
+        source.start();
       });
     }
 
-    function toggleMute() {
-      const isSender = audioContextSender !== undefined;
-      const gainNode = isSender ? senderGain : window.audioGainNode;
-      const muteBtn = document.getElementById("muteBtn");
-      if (!gainNode) return;
+    muteBtn.onclick = () => {
+      isMuted = !isMuted;
+      muteBtn.textContent = isMuted ? "Unmute" : "Mute";
+    };
 
-      const isMuted = gainNode.gain.value === 0;
-      gainNode.gain.value = isMuted ? 1 : 0;
-      muteBtn.textContent = isMuted ? "Mute" : "Unmute";
-    }
-
-    function adjustVolume(e) {
-      const volume = parseFloat(e.target.value);
-      if (audioContextSender && senderGain) senderGain.gain.value = volume;
-      if (window.audioGainNode) window.audioGainNode.gain.value = volume;
-    }
+    volumeBtn.onclick = () => {
+      audioElement.volume = audioElement.volume === 1 ? 0.3 : 1;
+      volumeBtn.textContent = audioElement.volume === 1 ? "🔊 Volume" : "🔉 Low";
+    };
 
     function openFullscreen() {
       const elem = document.documentElement;
-      const controls = document.getElementById("controls");
-
       if (elem.requestFullscreen) {
         elem.requestFullscreen();
       } else if (elem.webkitRequestFullscreen) {
@@ -246,17 +216,22 @@
       } else if (elem.msRequestFullscreen) {
         elem.msRequestFullscreen();
       }
-
-      document.addEventListener("fullscreenchange", () => {
-        controls.classList.toggle("hidden", document.fullscreenElement !== null);
-      });
     }
 
-    document.getElementById("startStreamBtn").onclick = startStreaming;
-    document.getElementById("startReceiveBtn").onclick = startReceiving;
-    document.getElementById("fullscreenBtn").onclick = openFullscreen;
-    document.getElementById("muteBtn").onclick = toggleMute;
-    document.getElementById("volumeSlider").oninput = adjustVolume;
+    document.getElementById('fullscreenBtn').onclick = () => {
+      document.getElementById('controls').classList.add('hidden');
+      openFullscreen();
+    };
+
+    document.addEventListener("fullscreenchange", () => {
+      const controls = document.getElementById('controls');
+      if (!document.fullscreenElement) {
+        controls.classList.remove('hidden');
+      }
+    });
+
+    document.getElementById('startStreamBtn').onclick = startStreaming;
+    document.getElementById('startReceiveBtn').onclick = startReceiving;
   </script>
 </body>
 </html>
