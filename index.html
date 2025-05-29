@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!DOCTYPE html> 
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -87,6 +87,7 @@
 
   <div class="controls" id="controls">
     <button id="startStreamBtn">Start Sender</button>
+    <button id="switchCameraBtn">Switch Camera</button> <!-- New button -->
     <button id="startReceiveBtn">Start Viewer</button>
     <button id="fullscreenBtn">Fullscreen</button>
     <button id="muteBtn">Mute</button>
@@ -121,14 +122,29 @@
     const volUpBtn = document.getElementById('volUpBtn');
     const volDownBtn = document.getElementById('volDownBtn');
     const volDisplay = document.getElementById('volDisplay');
+    const switchCameraBtn = document.getElementById('switchCameraBtn');
 
     let senderGainNode = null;
     let receiverGainNode = null;
     let audioBufferQueue = [];
     let isPlayingAudio = false;
 
-    document.getElementById('startStreamBtn').onclick = async () => {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    // Keep track of current camera facing mode
+    let currentFacingMode = "user"; // default front camera
+    let currentStream = null;
+
+    async function startStream(facingMode = "user") {
+      if (currentStream) {
+        // Stop all tracks of existing stream
+        currentStream.getTracks().forEach(track => track.stop());
+      }
+      // Request media with specified facingMode
+      const constraints = {
+        video: { facingMode: facingMode },
+        audio: true
+      };
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      currentStream = stream;
       localVideo.srcObject = stream;
 
       const video = document.createElement('video');
@@ -172,6 +188,19 @@
         }
         set(audioRef, btoa(String.fromCharCode(...new Uint8Array(buffer))));
       };
+    }
+
+    document.getElementById('startStreamBtn').onclick = async () => {
+      currentFacingMode = "user"; // reset to front camera when starting stream
+      await startStream(currentFacingMode);
+    };
+
+    switchCameraBtn.onclick = async () => {
+      if (!currentStream) return; // Do nothing if stream not started
+
+      // Toggle camera facing mode
+      currentFacingMode = currentFacingMode === "user" ? "environment" : "user";
+      await startStream(currentFacingMode);
     };
 
     document.getElementById('startReceiveBtn').onclick = () => {
