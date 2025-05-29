@@ -21,38 +21,33 @@
       height: 100vh;
       object-fit: contain;
       background: black;
-      z-index: 1;
+      z-index: 9999;
       display: none;
     }
 
-    #preview {
+    #localPreview {
       position: fixed;
-      bottom: 20px;
-      right: 20px;
+      bottom: 10px;
+      right: 10px;
       width: 200px;
-      height: auto;
-      z-index: 9999;
-      border: 2px solid white;
-      border-radius: 10px;
+      height: 150px;
       background: black;
-    }
-
-    #controls, #senderControls {
-      position: relative;
       z-index: 10000;
-      background: rgba(0, 0, 0, 0.5);
-      padding: 10px;
-      border-radius: 10px;
-      display: inline-block;
-      margin-bottom: 15px;
+      display: none;
     }
 
-    button, input[type="range"] {
+    #controls {
+      margin-bottom: 15px;
+      z-index: 10001;
+      position: relative;
+    }
+
+    button {
       background: #222;
       border: none;
       color: white;
       padding: 10px 15px;
-      margin: 5px;
+      margin: 0 5px;
       cursor: pointer;
       font-size: 16px;
       border-radius: 5px;
@@ -63,12 +58,12 @@
     }
 
     audio {
-      display: none;
+      margin-top: 10px;
+      width: 320px;
     }
   </style>
 </head>
 <body>
-
   <div id="controls">
     <button id="startStreamBtn">Start Streaming (Sender)</button>
     <button id="startReceiveBtn">Start Receiving (Viewer)</button>
@@ -76,17 +71,8 @@
     <button id="muteBtn" style="display: none;">Mute</button>
   </div>
 
-  <div id="senderControls" style="display: none;">
-    <label>Volume: </label>
-    <button data-volume="0">Mute</button>
-    <button data-volume="0.3">Low</button>
-    <button data-volume="0.6">Medium</button>
-    <button data-volume="1">High</button>
-  </div>
-
-  <video id="preview" autoplay muted playsinline></video>
   <img id="liveStreamView" alt="Live Stream Here" />
-  <audio id="liveAudio" autoplay></audio>
+  <video id="localPreview" autoplay muted playsinline></video>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.3.0/firebase-app.js";
@@ -108,17 +94,18 @@
     const videoRef = ref(db, 'liveStream/videoFrame');
     const audioRef = ref(db, 'liveStream/audioChunk');
 
-    const preview = document.getElementById('preview');
-    const senderControls = document.getElementById('senderControls');
-
     async function startStreaming() {
-      document.getElementById('liveStreamView').style.display = 'none';
-      senderControls.style.display = 'block';
+      const video = document.getElementById('localPreview');
+      video.style.display = 'block';
 
       let stream;
       try {
         stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        preview.srcObject = stream;
+        video.srcObject = stream;
+
+        stream.getAudioTracks().forEach(track => {
+          track.enabled = true; // allow sending
+        });
       } catch (err) {
         alert("Error accessing camera/mic: " + err.message);
         return;
@@ -145,12 +132,7 @@
       };
 
       source.connect(processor);
-      // do NOT connect processor to destination (no feedback to sender)
-      processor.connect(audioContext.createGain()); // dummy gain to avoid playback
-
-      const video = document.createElement('video');
-      video.srcObject = stream;
-      video.play();
+      processor.connect(audioContext.createGain()); // no output to avoid local playback
 
       video.addEventListener('loadedmetadata', () => {
         canvas.width = video.videoWidth;
@@ -163,14 +145,7 @@
         }, 100);
       });
 
-      senderControls.querySelectorAll('button[data-volume]').forEach(btn => {
-        btn.onclick = () => {
-          const vol = parseFloat(btn.getAttribute('data-volume'));
-          stream.getAudioTracks().forEach(track => {
-            track.enabled = vol > 0;
-          });
-        };
-      });
+      document.getElementById('liveStreamView').style.display = 'block';
     }
 
     function startReceiving() {
@@ -205,10 +180,11 @@
 
           window.audioGainNode.connect(window.audioContextReceiver.destination);
 
+          let isMuted = false;
           muteBtn.onclick = () => {
-            const gain = window.audioGainNode.gain;
-            gain.value = gain.value > 0 ? 0 : 1;
-            muteBtn.textContent = gain.value > 0 ? "Mute" : "Unmute";
+            isMuted = !isMuted;
+            window.audioGainNode.gain.setValueAtTime(isMuted ? 0 : 1, window.audioContextReceiver.currentTime);
+            muteBtn.textContent = isMuted ? "Unmute" : "Mute";
           };
 
           document.addEventListener("visibilitychange", () => {
