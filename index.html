@@ -44,9 +44,13 @@
       background: #555;
     }
 
-    audio {
-      margin-top: 10px;
-      width: 320px;
+    video.preview {
+      position: fixed;
+      bottom: 10px;
+      right: 10px;
+      width: 200px;
+      z-index: 10001;
+      border: 2px solid white;
     }
   </style>
 </head>
@@ -60,8 +64,6 @@
   </div>
 
   <img id="liveStreamView" alt="Live Stream Here" />
-  <audio id="liveAudio" autoplay></audio>
-
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.3.0/firebase-app.js";
     import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.3.0/firebase-database.js";
@@ -83,64 +85,60 @@
     const audioRef = ref(db, 'liveStream/audioChunk');
 
     async function startStreaming() {
-      const video = document.createElement('video');
-      video.autoplay = true;
-      video.muted = true; // Prevent sender from hearing their own audio
-
-      // Show local camera preview bottom-right corner
-      video.style.position = "fixed";
-      video.style.bottom = "10px";
-      video.style.right = "10px";
-      video.style.width = "200px";
-      video.style.zIndex = 10000;
-      document.body.appendChild(video);
+      const preview = document.createElement('video');
+      preview.autoplay = true;
+      preview.muted = true;
+      preview.className = 'preview';
+      document.body.appendChild(preview);
 
       let stream;
       try {
         stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        video.srcObject = stream;
-
-        stream.getAudioTracks().forEach(track => {
-          track.enabled = true;
-        });
+        preview.srcObject = stream;
       } catch (err) {
-        alert("Error accessing camera/mic: " + err.message);
+        alert("Camera/Mic access failed: " + err.message);
         return;
       }
 
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
 
-      const audioContext = new AudioContext();
-      const source = audioContext.createMediaStreamSource(stream);
-      const processor = audioContext.createScriptProcessor(4096, 1, 1);
+      const audioCtx = new AudioContext();
+      const source = audioCtx.createMediaStreamSource(stream);
+      const processor = audioCtx.createScriptProcessor(2048, 1, 1);
 
       processor.onaudioprocess = (e) => {
-        const inputData = e.inputBuffer.getChannelData(0);
-        const buffer = new ArrayBuffer(inputData.length * 2);
+        const input = e.inputBuffer.getChannelData(0);
+        const buffer = new ArrayBuffer(input.length * 2);
         const view = new DataView(buffer);
-        for (let i = 0; i < inputData.length; i++) {
-          let s = Math.max(-1, Math.min(1, inputData[i]));
+
+        for (let i = 0; i < input.length; i++) {
+          let s = Math.max(-1, Math.min(1, input[i]));
           s = s < 0 ? s * 0x8000 : s * 0x7FFF;
           view.setInt16(i * 2, s, true);
         }
+
         const base64Audio = btoa(String.fromCharCode(...new Uint8Array(buffer)));
         set(audioRef, base64Audio);
       };
 
       source.connect(processor);
-      // processor.connect(audioContext.destination); // Not connected to avoid sender hearing audio
+      processor.connect(audioCtx.destination); // required to keep processor running
 
-      video.addEventListener('loadedmetadata', () => {
+      const video = document.createElement('video');
+      video.srcObject = stream;
+      video.play();
+
+      video.onloadedmetadata = () => {
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
 
         setInterval(() => {
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          const frameData = canvas.toDataURL('image/jpeg', 0.5);
-          set(videoRef, frameData);
+          const frame = canvas.toDataURL('image/jpeg', 0.5);
+          set(videoRef, frame);
         }, 100);
-      });
+      };
 
       document.getElementById('liveStreamView').style.display = 'block';
     }
@@ -151,77 +149,62 @@
       img.style.display = 'block';
       muteBtn.style.display = 'inline-block';
 
-      onValue(videoRef, (snapshot) => {
-        const frameData = snapshot.val();
-        if (frameData) {
-          img.src = frameData;
-        }
+      onValue(videoRef, (snap) => {
+        const frame = snap.val();
+        if (frame) img.src = frame;
       });
 
-      onValue(audioRef, (snapshot) => {
-        const base64Audio = snapshot.val();
+      onValue(audioRef, (snap) => {
+        const base64Audio = snap.val();
         if (!base64Audio) return;
 
-        const binaryString = atob(base64Audio);
-        const len = binaryString.length;
+        const binary = atob(base64Audio);
+        const len = binary.length;
         const bytes = new Uint8Array(len);
-        for (let i = 0; i < len; i++) {
-          bytes[i] = binaryString.charCodeAt(i);
-        }
+        for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
 
         if (!window.audioContextReceiver) {
-          window.audioContextReceiver = new AudioContext();
-          window.audioGainNode = window.audioContextReceiver.createGain();
-          window.audioBufferQueue = [];
-          window.isPlaying = false;
+          const audioCtx = new AudioContext();
+          const gain = audioCtx.createGain();
+          gain.connect(audioCtx.destination);
 
-          window.audioGainNode.connect(window.audioContextReceiver.destination);
+          window.audioContextReceiver = audioCtx;
+          window.audioGainNode = gain;
+          window.audioQueue = [];
+          window.playing = false;
 
           muteBtn.onclick = () => {
-            const gain = window.audioGainNode.gain;
-            gain.value = gain.value > 0 ? 0 : 1;
-            muteBtn.textContent = gain.value > 0 ? "Mute" : "Unmute";
+            gain.gain.value = gain.gain.value > 0 ? 0 : 1;
+            muteBtn.textContent = gain.gain.value > 0 ? 'Mute' : 'Unmute';
           };
-
-          document.addEventListener("visibilitychange", () => {
-            if (document.visibilityState === "visible" && window.audioContextReceiver.state === "suspended") {
-              window.audioContextReceiver.resume();
-            }
-          });
         }
 
-        const audioContext = window.audioContextReceiver;
-        const sampleRate = 44100;
-
+        const ctx = window.audioContextReceiver;
         const float32 = new Float32Array(bytes.length / 2);
         for (let i = 0; i < float32.length; i++) {
-          const val = (bytes[i * 2] | (bytes[i * 2 + 1] << 8));
+          const val = bytes[i * 2] | (bytes[i * 2 + 1] << 8);
           float32[i] = val < 0x8000 ? val / 0x8000 : (val - 0x10000) / 0x8000;
         }
 
-        const audioBuffer = audioContext.createBuffer(1, float32.length, sampleRate);
-        audioBuffer.getChannelData(0).set(float32);
-        window.audioBufferQueue.push(audioBuffer);
+        const buffer = ctx.createBuffer(1, float32.length, 44100);
+        buffer.getChannelData(0).set(float32);
+        window.audioQueue.push(buffer);
 
-        if (!window.isPlaying) {
-          playAudioBufferQueue();
-        }
+        if (!window.playing) playAudio();
 
-        function playAudioBufferQueue() {
-          if (window.audioBufferQueue.length === 0) {
-            window.isPlaying = false;
+        function playAudio() {
+          if (window.audioQueue.length === 0) {
+            window.playing = false;
             return;
           }
-          window.isPlaying = true;
-          const buffer = window.audioBufferQueue.shift();
-          const source = audioContext.createBufferSource();
-          source.buffer = buffer;
-          source.connect(window.audioGainNode);
-          source.start();
 
-          source.onended = () => {
-            playAudioBufferQueue();
-          };
+          const b = window.audioQueue.shift();
+          const src = ctx.createBufferSource();
+          src.buffer = b;
+          src.connect(window.audioGainNode);
+          src.start();
+          src.onended = playAudio;
+          window.playing = true;
         }
       });
     }
