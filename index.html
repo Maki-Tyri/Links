@@ -9,16 +9,41 @@
       background: #111;
       color: white;
       text-align: center;
-      margin: 0; padding: 20px;
+      margin: 0;
+      padding: 20px;
     }
 
-    #liveStreamView, #preview {
-      width: 100%;
-      max-height: 50vh;
+    #liveStreamView {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      object-fit: contain;
+      background: black;
+      z-index: 1;
+      display: none;
+    }
+
+    #preview {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 200px;
+      height: auto;
+      z-index: 9999;
+      border: 2px solid white;
+      border-radius: 10px;
       background: black;
     }
 
-    #controls {
+    #controls, #senderControls {
+      position: relative;
+      z-index: 10000;
+      background: rgba(0, 0, 0, 0.5);
+      padding: 10px;
+      border-radius: 10px;
+      display: inline-block;
       margin-bottom: 15px;
     }
 
@@ -37,8 +62,8 @@
       background: #555;
     }
 
-    #senderControls {
-      margin-top: 15px;
+    audio {
+      display: none;
     }
   </style>
 </head>
@@ -52,12 +77,15 @@
   </div>
 
   <div id="senderControls" style="display: none;">
-    <button id="senderMuteBtn">Mute</button>
-    <input id="volumeSlider" type="range" min="0" max="1" step="0.01" value="1" />
+    <label>Volume: </label>
+    <button data-volume="0">Mute</button>
+    <button data-volume="0.3">Low</button>
+    <button data-volume="0.6">Medium</button>
+    <button data-volume="1">High</button>
   </div>
 
   <video id="preview" autoplay muted playsinline></video>
-  <img id="liveStreamView" alt="Live Stream View" style="display: none;" />
+  <img id="liveStreamView" alt="Live Stream Here" />
   <audio id="liveAudio" autoplay></audio>
 
   <script type="module">
@@ -84,6 +112,7 @@
     const senderControls = document.getElementById('senderControls');
 
     async function startStreaming() {
+      document.getElementById('liveStreamView').style.display = 'none';
       senderControls.style.display = 'block';
 
       let stream;
@@ -91,30 +120,23 @@
         stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         preview.srcObject = stream;
       } catch (err) {
-        alert("Camera/Mic access failed: " + err.message);
+        alert("Error accessing camera/mic: " + err.message);
         return;
       }
 
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
 
-      const audioCtx = new AudioContext();
-      const micSource = audioCtx.createMediaStreamSource(stream);
-      const gainNode = audioCtx.createGain();
-      gainNode.gain.value = 1;
+      const audioContext = new AudioContext();
+      const source = audioContext.createMediaStreamSource(stream);
+      const processor = audioContext.createScriptProcessor(4096, 1, 1);
 
-      micSource.connect(gainNode);
-      gainNode.connect(audioCtx.destination);
-
-      window.senderGainNode = gainNode;
-
-      const processor = audioCtx.createScriptProcessor(2048, 1, 1);
       processor.onaudioprocess = (e) => {
-        const input = e.inputBuffer.getChannelData(0);
-        const buffer = new ArrayBuffer(input.length * 2);
+        const inputData = e.inputBuffer.getChannelData(0);
+        const buffer = new ArrayBuffer(inputData.length * 2);
         const view = new DataView(buffer);
-        for (let i = 0; i < input.length; i++) {
-          let s = Math.max(-1, Math.min(1, input[i]));
+        for (let i = 0; i < inputData.length; i++) {
+          let s = Math.max(-1, Math.min(1, inputData[i]));
           s = s < 0 ? s * 0x8000 : s * 0x7FFF;
           view.setInt16(i * 2, s, true);
         }
@@ -122,18 +144,32 @@
         set(audioRef, base64Audio);
       };
 
-      micSource.connect(processor);
-      processor.connect(audioCtx.destination);
+      source.connect(processor);
+      // do NOT connect processor to destination (no feedback to sender)
+      processor.connect(audioContext.createGain()); // dummy gain to avoid playback
 
-      preview.addEventListener('loadedmetadata', () => {
-        canvas.width = preview.videoWidth;
-        canvas.height = preview.videoHeight;
+      const video = document.createElement('video');
+      video.srcObject = stream;
+      video.play();
+
+      video.addEventListener('loadedmetadata', () => {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
 
         setInterval(() => {
-          ctx.drawImage(preview, 0, 0, canvas.width, canvas.height);
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
           const frameData = canvas.toDataURL('image/jpeg', 0.5);
           set(videoRef, frameData);
         }, 100);
+      });
+
+      senderControls.querySelectorAll('button[data-volume]').forEach(btn => {
+        btn.onclick = () => {
+          const vol = parseFloat(btn.getAttribute('data-volume'));
+          stream.getAudioTracks().forEach(track => {
+            track.enabled = vol > 0;
+          });
+        };
       });
     }
 
@@ -229,25 +265,9 @@
       }
     }
 
-    // UI EVENTS
     document.getElementById('startStreamBtn').onclick = startStreaming;
     document.getElementById('startReceiveBtn').onclick = startReceiving;
     document.getElementById('fullscreenBtn').onclick = openFullscreen;
-
-    document.getElementById('volumeSlider').addEventListener('input', (e) => {
-      const volume = parseFloat(e.target.value);
-      if (window.senderGainNode) {
-        window.senderGainNode.gain.value = volume;
-      }
-    });
-
-    document.getElementById('senderMuteBtn').onclick = () => {
-      if (window.senderGainNode) {
-        const muted = window.senderGainNode.gain.value === 0;
-        window.senderGainNode.gain.value = muted ? 1 : 0;
-        document.getElementById('senderMuteBtn').textContent = muted ? 'Mute' : 'Unmute';
-      }
-    };
   </script>
 </body>
 </html>
